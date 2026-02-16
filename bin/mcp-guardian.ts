@@ -404,17 +404,27 @@ async function runMcpServer(): Promise<void> {
       }
 
       // Return manifest info since we don't have current tools in MCP mode
+      // Multi-server format: summarize all servers
+      const servers = Object.entries(manifest.servers).map(([name, entry]) => ({
+        name,
+        toolCount: Object.keys(entry.tools).length,
+        pinnedAt: entry.pinnedAt,
+        tools: Object.keys(entry.tools),
+      }));
+
+      const totalToolCount = servers.reduce((sum, s) => sum + s.toolCount, 0);
+
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify({
               manifestExists: true,
-              pinnedToolCount: Object.keys(manifest.tools).length,
-              pinnedAt: manifest.pinnedAt,
-              serverName: manifest.server,
+              serverCount: servers.length,
+              totalToolCount,
+              version: manifest.version,
               message: "Use 'getToolDiff' in library mode with tool definitions for full diff.",
-              tools: Object.keys(manifest.tools),
+              servers,
             }, null, 2),
           },
         ],

@@ -107,9 +107,33 @@ export interface ToolPinEntry {
 }
 
 /**
+ * Per-server manifest entry in multi-server manifest.
+ */
+export interface ServerManifestEntry {
+  /** ISO timestamp when this server's tools were pinned */
+  pinnedAt: string;
+  /** Map of tool name -> pin entry */
+  tools: Record<string, ToolPinEntry>;
+}
+
+/**
  * The complete tool manifest stored on disk.
+ * Supports multiple servers with per-server tracking.
  */
 export interface ToolManifest {
+  /** Package version that created this manifest */
+  version: string;
+  /** Multi-server manifest format indicator */
+  format: "multi-server";
+  /** Map of server name -> server manifest entry */
+  servers: Record<string, ServerManifestEntry>;
+}
+
+/**
+ * Legacy single-server manifest format (for migration).
+ * @deprecated Use ToolManifest with multi-server format
+ */
+export interface LegacyToolManifest {
   /** Server identifier */
   server: string;
   /** Package version that created this manifest */

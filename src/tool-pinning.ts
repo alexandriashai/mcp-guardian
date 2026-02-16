@@ -12,6 +12,8 @@ import type {
   ToolDefinition,
   ToolPinEntry,
   ToolManifest,
+  LegacyToolManifest,
+  ServerManifestEntry,
   PinningResult,
 } from "./types.js";
 
@@ -88,16 +90,36 @@ function countParameters(schema: unknown): number {
 }
 
 /**
- * Create a new tool manifest from a list of tool definitions.
+ * Check if a manifest is in legacy format
+ */
+function isLegacyManifest(data: unknown): data is LegacyToolManifest {
+  const obj = data as Record<string, unknown>;
+  return typeof obj.server === "string" && typeof obj.tools === "object" && !obj.format;
+}
+
+/**
+ * Migrate a legacy single-server manifest to multi-server format
+ */
+function migrateLegacyManifest(legacy: LegacyToolManifest): ToolManifest {
+  return {
+    version: legacy.version,
+    format: "multi-server",
+    servers: {
+      [legacy.server]: {
+        pinnedAt: legacy.pinnedAt,
+        tools: legacy.tools,
+      },
+    },
+  };
+}
+
+/**
+ * Create a tool manifest entry for a server from tool definitions.
  *
  * @param tools - Array of tool definitions
- * @param serverName - Server identifier (default: "mcp-guardian")
- * @returns Complete manifest ready for saving
+ * @returns Server manifest entry ready for storage
  */
-export function createToolManifest(
-  tools: ToolDefinition[],
-  serverName: string = "mcp-guardian"
-): ToolManifest {
+export function createServerEntry(tools: ToolDefinition[]): ServerManifestEntry {
   const now = new Date().toISOString();
   const toolEntries: Record<string, ToolPinEntry> = {};
 
@@ -111,15 +133,34 @@ export function createToolManifest(
   }
 
   return {
-    server: serverName,
-    version: getVersion(),
     pinnedAt: now,
     tools: toolEntries,
   };
 }
 
 /**
+ * Create a new multi-server tool manifest from a list of tool definitions.
+ *
+ * @param tools - Array of tool definitions
+ * @param serverName - Server identifier (default: "mcp-guardian")
+ * @returns Complete manifest ready for saving
+ */
+export function createToolManifest(
+  tools: ToolDefinition[],
+  serverName: string = "mcp-guardian"
+): ToolManifest {
+  return {
+    version: getVersion(),
+    format: "multi-server",
+    servers: {
+      [serverName]: createServerEntry(tools),
+    },
+  };
+}
+
+/**
  * Load the tool manifest from disk.
+ * Automatically migrates legacy single-server format to multi-server.
  *
  * @returns Manifest if it exists and is valid, null otherwise
  */
@@ -132,10 +173,20 @@ export function loadToolManifest(): ToolManifest | null {
 
   try {
     const content = readFileSync(path, "utf-8");
-    const manifest = JSON.parse(content) as ToolManifest;
+    const data = JSON.parse(content);
 
-    // Basic validation
-    if (!manifest.server || !manifest.tools) {
+    // Check for legacy format and migrate
+    if (isLegacyManifest(data)) {
+      console.error("[mcp-guardian] Migrating legacy manifest to multi-server format");
+      const migrated = migrateLegacyManifest(data);
+      saveToolManifest(migrated);
+      return migrated;
+    }
+
+    const manifest = data as ToolManifest;
+
+    // Basic validation for multi-server format
+    if (manifest.format !== "multi-server" || !manifest.servers) {
       console.error("[mcp-guardian] Invalid manifest structure");
       return null;
     }
@@ -166,36 +217,59 @@ export function saveToolManifest(manifest: ToolManifest): void {
 }
 
 /**
- * Verify tool definitions against the pinned manifest.
+ * Get the list of servers in the manifest.
+ */
+export function getManifestServers(): string[] {
+  const manifest = loadToolManifest();
+  if (!manifest) return [];
+  return Object.keys(manifest.servers);
+}
+
+/**
+ * Verify tool definitions for a specific server against the pinned manifest.
  *
  * Behavior:
  * - If no manifest exists: Creates one and returns status "created"
+ * - If server not in manifest: Adds it and returns status "created"
  * - If all hashes match: Returns status "verified"
  * - If any differences: Returns status "changed" with details
  *
  * @param tools - Current tool definitions from MCP server
- * @param serverName - Server identifier for new manifests
+ * @param serverName - Server identifier
  * @returns Verification result
  */
 export function verifyToolDefinitions(
   tools: ToolDefinition[],
   serverName: string = "mcp-guardian"
 ): PinningResult {
-  const existingManifest = loadToolManifest();
+  let manifest = loadToolManifest();
 
   // No manifest exists - create one
-  if (!existingManifest) {
-    const manifest = createToolManifest(tools, serverName);
+  if (!manifest) {
+    manifest = createToolManifest(tools, serverName);
     saveToolManifest(manifest);
     return {
       status: "created",
-      message: `Tool manifest created with ${tools.length} tools`,
+      message: `Tool manifest created for ${serverName} with ${tools.length} tools`,
     };
   }
 
-  // Compare current tools against manifest
+  // Server not in manifest - add it
+  if (!manifest.servers[serverName]) {
+    manifest.servers[serverName] = createServerEntry(tools);
+    manifest.version = getVersion();
+    saveToolManifest(manifest);
+    return {
+      status: "created",
+      message: `Server ${serverName} added to manifest with ${tools.length} tools`,
+    };
+  }
+
+  const serverEntry = manifest.servers[serverName];
+
+  // Compare current tools against server's pinned tools
   const currentToolNames = new Set(tools.map((t) => t.name));
-  const pinnedToolNames = new Set(Object.keys(existingManifest.tools));
+  const pinnedToolNames = new Set(Object.keys(serverEntry.tools));
 
   const changedTools: string[] = [];
   const newTools: string[] = [];
@@ -203,7 +277,7 @@ export function verifyToolDefinitions(
 
   // Check each current tool
   for (const tool of tools) {
-    const pinEntry = existingManifest.tools[tool.name];
+    const pinEntry = serverEntry.tools[tool.name];
 
     if (!pinEntry) {
       // Tool exists in current but not in manifest
@@ -231,7 +305,7 @@ export function verifyToolDefinitions(
   if (!hasChanges) {
     return {
       status: "verified",
-      message: `All ${tools.length} tool definitions verified successfully`,
+      message: `All ${tools.length} tool definitions for ${serverName} verified successfully`,
     };
   }
 
@@ -252,7 +326,7 @@ export function verifyToolDefinitions(
     changedTools: changedTools.length > 0 ? changedTools : undefined,
     newTools: newTools.length > 0 ? newTools : undefined,
     removedTools: removedTools.length > 0 ? removedTools : undefined,
-    message: `Tool definition changes detected: ${parts.join("; ")}`,
+    message: `Tool definition changes detected for ${serverName}: ${parts.join("; ")}`,
   };
 }
 
@@ -262,18 +336,27 @@ export function verifyToolDefinitions(
  *
  * @param toolName - Name of the tool to approve
  * @param tool - Current tool definition
- * @throws Error if no manifest exists
+ * @param serverName - Server the tool belongs to
+ * @throws Error if no manifest or server exists
  */
-export function approveToolChange(toolName: string, tool: ToolDefinition): void {
+export function approveToolChange(
+  toolName: string,
+  tool: ToolDefinition,
+  serverName: string = "mcp-guardian"
+): void {
   const manifest = loadToolManifest();
 
   if (!manifest) {
     throw new Error("Cannot approve tool change: no manifest exists");
   }
 
+  if (!manifest.servers[serverName]) {
+    throw new Error(`Cannot approve tool change: server ${serverName} not in manifest`);
+  }
+
   const now = new Date().toISOString();
 
-  manifest.tools[toolName] = {
+  manifest.servers[serverName].tools[toolName] = {
     hash: hashToolDefinition(tool.name, tool.description, tool.schema),
     descriptionLength: tool.description.length,
     parameterCount: countParameters(tool.schema),
@@ -288,23 +371,50 @@ export function approveToolChange(toolName: string, tool: ToolDefinition): void 
  * Used when a tool is intentionally removed.
  *
  * @param toolName - Name of the tool to remove
+ * @param serverName - Server the tool belongs to
  * @throws Error if no manifest exists
  */
-export function removeToolFromManifest(toolName: string): void {
+export function removeToolFromManifest(
+  toolName: string,
+  serverName: string = "mcp-guardian"
+): void {
   const manifest = loadToolManifest();
 
   if (!manifest) {
     throw new Error("Cannot remove tool: no manifest exists");
   }
 
-  if (manifest.tools[toolName]) {
-    delete manifest.tools[toolName];
+  if (!manifest.servers[serverName]) {
+    throw new Error(`Cannot remove tool: server ${serverName} not in manifest`);
+  }
+
+  if (manifest.servers[serverName].tools[toolName]) {
+    delete manifest.servers[serverName].tools[toolName];
     saveToolManifest(manifest);
   }
 }
 
 /**
- * Approve all current tools, replacing the entire manifest.
+ * Remove a server from the manifest entirely.
+ *
+ * @param serverName - Server to remove
+ * @throws Error if no manifest exists
+ */
+export function removeServerFromManifest(serverName: string): void {
+  const manifest = loadToolManifest();
+
+  if (!manifest) {
+    throw new Error("Cannot remove server: no manifest exists");
+  }
+
+  if (manifest.servers[serverName]) {
+    delete manifest.servers[serverName];
+    saveToolManifest(manifest);
+  }
+}
+
+/**
+ * Approve all current tools for a server, replacing its entry in the manifest.
  * Use with caution - this trusts the current state completely.
  *
  * @param tools - Current tool definitions
@@ -314,35 +424,81 @@ export function approveAllTools(
   tools: ToolDefinition[],
   serverName: string = "mcp-guardian"
 ): void {
-  const manifest = createToolManifest(tools, serverName);
+  let manifest = loadToolManifest();
+
+  if (!manifest) {
+    manifest = createToolManifest(tools, serverName);
+  } else {
+    manifest.servers[serverName] = createServerEntry(tools);
+    manifest.version = getVersion();
+  }
+
   saveToolManifest(manifest);
 }
 
 /**
  * Get a summary of the current manifest for status display.
+ * Returns aggregate information across all servers.
  */
 export function getManifestSummary(): {
   exists: boolean;
-  toolCount: number;
+  serverCount: number;
+  totalToolCount: number;
   version: string | null;
-  pinnedAt: string | null;
+  servers: Array<{ name: string; toolCount: number; pinnedAt: string }>;
 } {
   const manifest = loadToolManifest();
 
   if (!manifest) {
     return {
       exists: false,
-      toolCount: 0,
+      serverCount: 0,
+      totalToolCount: 0,
       version: null,
+      servers: [],
+    };
+  }
+
+  const servers = Object.entries(manifest.servers).map(([name, entry]) => ({
+    name,
+    toolCount: Object.keys(entry.tools).length,
+    pinnedAt: entry.pinnedAt,
+  }));
+
+  const totalToolCount = servers.reduce((sum, s) => sum + s.toolCount, 0);
+
+  return {
+    exists: true,
+    serverCount: servers.length,
+    totalToolCount,
+    version: manifest.version,
+    servers,
+  };
+}
+
+/**
+ * Get summary for a specific server.
+ */
+export function getServerSummary(serverName: string): {
+  exists: boolean;
+  toolCount: number;
+  pinnedAt: string | null;
+} {
+  const manifest = loadToolManifest();
+
+  if (!manifest || !manifest.servers[serverName]) {
+    return {
+      exists: false,
+      toolCount: 0,
       pinnedAt: null,
     };
   }
 
+  const entry = manifest.servers[serverName];
   return {
     exists: true,
-    toolCount: Object.keys(manifest.tools).length,
-    version: manifest.version,
-    pinnedAt: manifest.pinnedAt,
+    toolCount: Object.keys(entry.tools).length,
+    pinnedAt: entry.pinnedAt,
   };
 }
 
@@ -359,37 +515,58 @@ export interface ToolDiffEntry {
 }
 
 /**
- * Complete diff result between current tools and manifest
+ * Complete diff result between current tools and manifest for a server
  */
 export interface ToolDiff {
+  serverName: string;
   added: string[];
   removed: string[];
   changed: ToolDiffEntry[];
   unchanged: number;
   manifestExists: boolean;
+  serverExists: boolean;
 }
 
 /**
- * Get detailed diff between current tools and the pinned manifest.
+ * Get detailed diff between current tools and the pinned manifest for a server.
  *
  * @param tools - Current tool definitions
+ * @param serverName - Server to diff against
  * @returns Detailed diff showing added, removed, and changed tools
  */
-export function getToolDiff(tools: ToolDefinition[]): ToolDiff {
+export function getToolDiff(
+  tools: ToolDefinition[],
+  serverName: string = "mcp-guardian"
+): ToolDiff {
   const manifest = loadToolManifest();
 
   if (!manifest) {
     return {
+      serverName,
       added: tools.map(t => t.name),
       removed: [],
       changed: [],
       unchanged: 0,
       manifestExists: false,
+      serverExists: false,
     };
   }
 
+  if (!manifest.servers[serverName]) {
+    return {
+      serverName,
+      added: tools.map(t => t.name),
+      removed: [],
+      changed: [],
+      unchanged: 0,
+      manifestExists: true,
+      serverExists: false,
+    };
+  }
+
+  const serverEntry = manifest.servers[serverName];
   const currentToolNames = new Set(tools.map(t => t.name));
-  const pinnedToolNames = new Set(Object.keys(manifest.tools));
+  const pinnedToolNames = new Set(Object.keys(serverEntry.tools));
 
   const added: string[] = [];
   const removed: string[] = [];
@@ -398,7 +575,7 @@ export function getToolDiff(tools: ToolDefinition[]): ToolDiff {
 
   // Check each current tool
   for (const tool of tools) {
-    const pinEntry = manifest.tools[tool.name];
+    const pinEntry = serverEntry.tools[tool.name];
 
     if (!pinEntry) {
       added.push(tool.name);
@@ -427,10 +604,12 @@ export function getToolDiff(tools: ToolDefinition[]): ToolDiff {
   }
 
   return {
+    serverName,
     added,
     removed,
     changed,
     unchanged,
     manifestExists: true,
+    serverExists: true,
   };
 }

@@ -102,23 +102,31 @@ export async function securityAuditHandler(params: SecurityAuditHandlerOptions):
     }
 
     // Convert manifest entries to tool definitions for scanning
+    // Multi-server format: scan all servers
     // Note: We only have the tool names and metadata, not the actual descriptions
     // from the manifest. For a full scan, we'd need to query the server.
-    const tools = Object.entries(manifest.tools).map(([name, entry]) => ({
-      name,
-      // We use a placeholder description since manifest doesn't store descriptions
-      // Full scanning would require querying the actual server
-      description: `Tool: ${name} (${entry.descriptionLength} chars, ${entry.parameterCount} params)`,
-      schema: {},
-    }));
+    const allTools: ToolDefinition[] = [];
+    let totalToolCount = 0;
 
-    result = scanToolDefinitions(tools, manifest.server);
+    for (const [serverName, serverEntry] of Object.entries(manifest.servers)) {
+      for (const [name, entry] of Object.entries(serverEntry.tools)) {
+        allTools.push({
+          name: `${serverName}/${name}`,
+          // We use a placeholder description since manifest doesn't store descriptions
+          description: `Tool: ${name} (${entry.descriptionLength} chars, ${entry.parameterCount} params)`,
+          schema: {},
+        });
+        totalToolCount++;
+      }
+    }
+
+    result = scanToolDefinitions(allTools, "manifest-scan");
 
     // Add manifest info to result
     (result as ServerScanResult & { manifestInfo?: object }).manifestInfo = {
       version: manifest.version,
-      pinnedAt: manifest.pinnedAt,
-      toolCount: Object.keys(manifest.tools).length,
+      serverCount: Object.keys(manifest.servers).length,
+      totalToolCount,
     };
   }
 
