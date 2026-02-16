@@ -1,5 +1,12 @@
 # Changelog
 
+# [1.9.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.8.0...v1.9.0) (2026-02-16)
+
+
+### Features
+
+* **cli:** add configuration file support ([1473aae](https://github.com/alexandriashai/mcp-guardian/commit/1473aaee639ad7bc9cf46dc02af3b4c467689328)), closes [#15](https://github.com/alexandriashai/mcp-guardian/issues/15)
+
 # [1.8.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.7.0...v1.8.0) (2026-02-16)
 
 
