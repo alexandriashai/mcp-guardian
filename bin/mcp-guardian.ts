@@ -131,7 +131,7 @@ async function runMcpServer(): Promise<void> {
  */
 async function runCliScan(configPath: string | null, options: {
   json?: boolean;
-  async?: boolean;
+  sync?: boolean;
 }): Promise<void> {
   const targetPath = configPath || getDefaultConfigPath();
 
@@ -147,11 +147,14 @@ async function runCliScan(configPath: string | null, options: {
   console.error(`[mcp-guardian] Scanning: ${targetPath}`);
 
   let result;
-  if (options.async) {
-    result = await scanMcpConfig(targetPath);
-  } else {
+  if (options.sync) {
+    // Sync mode only parses config structure, doesn't query servers
     result = scanMcpConfigSync(targetPath);
-    console.error(`[mcp-guardian] Note: Use --async to actually query MCP servers`);
+    console.error(`[mcp-guardian] Note: --sync mode only reads config structure (no tool scanning)`);
+  } else {
+    // Default: async mode that actually queries MCP servers
+    console.error(`[mcp-guardian] Connecting to MCP servers to scan their tools...`);
+    result = await scanMcpConfig(targetPath);
   }
 
   if (options.json) {
@@ -197,12 +200,12 @@ USAGE:
 OPTIONS:
   --mcp           Run as MCP server (for Claude Desktop integration)
   --json          Output JSON instead of human-readable format
-  --async         Actually connect to MCP servers to scan their tools
+  --sync          Fast mode: only parse config, don't query servers (no tool scanning)
   --version, -v   Show version
   --help, -h      Show this help
 
 EXAMPLES:
-  # Auto-detect Claude Desktop config
+  # Scan all MCP servers in Claude Desktop config (default: async)
   mcp-guardian
 
   # Scan specific config file
@@ -211,8 +214,11 @@ EXAMPLES:
   # Run as MCP server for Claude Desktop
   mcp-guardian --mcp
 
-  # JSON output with async scanning
-  mcp-guardian --json --async
+  # JSON output
+  mcp-guardian --json
+
+  # Fast scan (config structure only, no server queries)
+  mcp-guardian --sync
 
 CLAUDE DESKTOP INTEGRATION:
   Add to your claude_desktop_config.json:
@@ -238,7 +244,7 @@ async function main(): Promise<void> {
   const options = {
     mcp: args.includes("--mcp"),
     json: args.includes("--json"),
-    async: args.includes("--async"),
+    sync: args.includes("--sync"),
     help: args.includes("--help") || args.includes("-h"),
     version: args.includes("--version") || args.includes("-v"),
   };
@@ -262,7 +268,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  await runCliScan(configPath, options);
+  await runCliScan(configPath, { json: options.json, sync: options.sync });
 }
 
 main().catch((error) => {
