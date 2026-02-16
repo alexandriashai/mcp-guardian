@@ -1,5 +1,12 @@
 # Changelog
 
+# [1.3.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.2.2...v1.3.0) (2026-02-16)
+
+
+### Features
+
+* **cli:** add exit codes, SARIF output, severity filtering, and quiet mode ([7e430a8](https://github.com/alexandriashai/mcp-guardian/commit/7e430a8447cf924e6d8a3f879155b74617494e78)), closes [#1](https://github.com/alexandriashai/mcp-guardian/issues/1) [#2](https://github.com/alexandriashai/mcp-guardian/issues/2) [#4](https://github.com/alexandriashai/mcp-guardian/issues/4) [#16](https://github.com/alexandriashai/mcp-guardian/issues/16)
+
 ## [1.2.2](https://github.com/alexandriashai/mcp-guardian/compare/v1.2.1...v1.2.2) (2026-02-16)
 
 
