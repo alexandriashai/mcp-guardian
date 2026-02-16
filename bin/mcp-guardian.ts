@@ -173,7 +173,12 @@ async function runCliScan(configPath: string | null, options: {
 
       if (server.issues.length > 0) {
         for (const tool of server.issues) {
-          console.log(`     └─ ${tool.toolName}: ${tool.issues.length} issue(s)`);
+          console.log(`     └─ ${tool.toolName}:`);
+          for (const issue of tool.issues) {
+            const severity = issue.severity === "critical" ? "🔴 CRITICAL" : "🟡 WARNING";
+            console.log(`        ${severity}: ${issue.pattern}`);
+            console.log(`           Match: "${issue.match}" at position ${issue.position}`);
+          }
         }
       }
     }
@@ -184,6 +189,9 @@ async function runCliScan(configPath: string | null, options: {
     console.log(`  Warning: ${result.summary.warning}`);
     console.log(`  Critical: ${result.summary.critical}`);
   }
+
+  // Force exit to close any lingering MCP connections
+  process.exit(0);
 }
 
 /**
