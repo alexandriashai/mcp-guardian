@@ -5,9 +5,11 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
+import { join, basename } from "node:path";
 import { getDataDir, getVersion } from "./config.js";
+
+const MAX_BACKUPS = 5;
 import type {
   ToolDefinition,
   ToolPinEntry,
@@ -199,8 +201,123 @@ export function loadToolManifest(): ToolManifest | null {
 }
 
 /**
+ * Get the directory for manifest backups.
+ */
+export function getBackupDir(): string {
+  return join(getDataDir(), "backups");
+}
+
+/**
+ * Create a backup of the current manifest before overwriting.
+ * Keeps the last MAX_BACKUPS backups.
+ */
+function backupManifest(): void {
+  const path = getManifestPath();
+  if (!existsSync(path)) return;
+
+  const backupDir = getBackupDir();
+  if (!existsSync(backupDir)) {
+    mkdirSync(backupDir, { recursive: true });
+  }
+
+  // Create backup with timestamp
+  const timestamp = Date.now();
+  const backupPath = join(backupDir, `tool-manifest.${timestamp}.json`);
+
+  const content = readFileSync(path, "utf-8");
+  writeFileSync(backupPath, content, "utf-8");
+
+  // Prune old backups (keep last MAX_BACKUPS)
+  pruneBackups();
+}
+
+/**
+ * Remove old backups beyond MAX_BACKUPS.
+ */
+function pruneBackups(): void {
+  const backupDir = getBackupDir();
+  if (!existsSync(backupDir)) return;
+
+  const files = readdirSync(backupDir)
+    .filter(f => f.startsWith("tool-manifest.") && f.endsWith(".json"))
+    .sort()
+    .reverse();
+
+  // Delete backups beyond MAX_BACKUPS
+  for (let i = MAX_BACKUPS; i < files.length; i++) {
+    const filePath = join(backupDir, files[i]);
+    unlinkSync(filePath);
+  }
+}
+
+/**
+ * List available backups.
+ * @returns Array of backup info sorted by timestamp (newest first)
+ */
+export function listBackups(): Array<{ timestamp: number; path: string; date: string }> {
+  const backupDir = getBackupDir();
+  if (!existsSync(backupDir)) return [];
+
+  return readdirSync(backupDir)
+    .filter(f => f.startsWith("tool-manifest.") && f.endsWith(".json"))
+    .map(f => {
+      const match = f.match(/tool-manifest\.(\d+)\.json/);
+      const timestamp = match ? parseInt(match[1], 10) : 0;
+      return {
+        timestamp,
+        path: join(backupDir, f),
+        date: new Date(timestamp).toISOString(),
+      };
+    })
+    .sort((a, b) => b.timestamp - a.timestamp);
+}
+
+/**
+ * Rollback to a specific backup.
+ * @param timestamp - Timestamp of backup to restore, or undefined for latest
+ * @returns true if rollback succeeded
+ */
+export function rollbackManifest(timestamp?: number): { success: boolean; message: string; restoredFrom?: string } {
+  const backups = listBackups();
+
+  if (backups.length === 0) {
+    return { success: false, message: "No backups available" };
+  }
+
+  let targetBackup: typeof backups[0];
+
+  if (timestamp) {
+    const found = backups.find(b => b.timestamp === timestamp);
+    if (!found) {
+      return { success: false, message: `Backup with timestamp ${timestamp} not found` };
+    }
+    targetBackup = found;
+  } else {
+    targetBackup = backups[0]; // Latest backup
+  }
+
+  try {
+    // Backup current state before rolling back
+    backupManifest();
+
+    // Restore from backup
+    const content = readFileSync(targetBackup.path, "utf-8");
+    writeFileSync(getManifestPath(), content, "utf-8");
+
+    return {
+      success: true,
+      message: `Restored from backup dated ${targetBackup.date}`,
+      restoredFrom: targetBackup.path,
+    };
+  } catch (error) {
+    return { success: false, message: `Rollback failed: ${(error as Error).message}` };
+  }
+}
+
+/**
  * Save a tool manifest to disk.
  * Creates the directory if it doesn't exist.
+ * Automatically backs up the previous manifest.
  *
  * @param manifest - The manifest to save
  */
@@ -211,6 +328,9 @@ export function saveToolManifest(manifest: ToolManifest): void {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
+
+  // Backup before overwriting
+  backupManifest();
 
   const content = JSON.stringify(manifest, null, 2);
   writeFileSync(path, content, "utf-8");

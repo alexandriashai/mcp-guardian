@@ -51,11 +51,14 @@ export {
 // Tool pinning
 export {
   getManifestPath,
+  getBackupDir,
   hashToolDefinition,
   createServerEntry,
   createToolManifest,
   loadToolManifest,
   saveToolManifest,
+  listBackups,
+  rollbackManifest,
   getManifestServers,
   verifyToolDefinitions,
   approveToolChange,

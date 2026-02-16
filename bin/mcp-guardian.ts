@@ -33,6 +33,8 @@ import {
   approveAllTools,
   getManifestPath,
   getToolDiff,
+  listBackups,
+  rollbackManifest,
 } from "../src/tool-pinning.js";
 import { scanToolDescription, loadCustomPatterns, setCustomPatternsOnly, type CustomPatternDef } from "../src/patterns.js";
 import type { ScanSummary, ScanSeverity, ServerScanResult } from "../src/types.js";
@@ -735,6 +737,8 @@ OPTIONS:
 
 COMMANDS:
   init                       Create template .mcp-guardian.json config file
+  manifest list-backups      List available manifest backups
+  manifest rollback [ts]     Restore manifest from backup (latest or by timestamp)
 
 EXIT CODES:
   0  Clean scan (no issues found)
@@ -965,6 +969,45 @@ async function main(): Promise<void> {
   if (args[0] === "init") {
     runInit();
     return;
+  }
+
+  // Handle manifest subcommands
+  if (args[0] === "manifest") {
+    const subcommand = args[1];
+
+    if (subcommand === "list-backups") {
+      const backups = listBackups();
+      if (backups.length === 0) {
+        console.log("No backups available.");
+      } else {
+        console.log("Available backups (newest first):");
+        for (const backup of backups) {
+          console.log(`  ${backup.timestamp}  ${backup.date}`);
+        }
+      }
+      return;
+    }
+
+    if (subcommand === "rollback") {
+      const timestamp = args[2] ? parseInt(args[2], 10) : undefined;
+      const result = rollbackManifest(timestamp);
+
+      if (result.success) {
+        console.log(`✓ ${result.message}`);
+        if (result.restoredFrom) {
+          console.log(`  From: ${result.restoredFrom}`);
+        }
+      } else {
+        console.error(`✗ ${result.message}`);
+        process.exit(EXIT_ERROR);
+      }
+      return;
+    }
+
+    // Unknown manifest subcommand
+    console.error(`Unknown manifest command: ${subcommand}`);
+    console.error("Available commands: list-backups, rollback [timestamp]");
+    process.exit(EXIT_ERROR);
   }
 
   // Parse CLI options (before config file merge)
