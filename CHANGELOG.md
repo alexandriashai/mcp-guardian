@@ -1,5 +1,12 @@
 # Changelog
 
+# [1.7.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.6.0...v1.7.0) (2026-02-16)
+
+
+### Features
+
+* **mcp:** add tool_diff MCP tool for viewing tool changes ([a8d94c4](https://github.com/alexandriashai/mcp-guardian/commit/a8d94c417a57f41fd9c6cf60fac8c08c1b931ca2)), closes [#8](https://github.com/alexandriashai/mcp-guardian/issues/8)
+
 # [1.6.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.5.0...v1.6.0) (2026-02-16)
 
 
