@@ -1,0 +1,30 @@
+# MCP Guardian Pre-commit Hooks
+# https://pre-commit.com
+#
+# Usage in your .pre-commit-config.yaml:
+#
+# repos:
+#   - repo: https://github.com/alexandriashai/mcp-guardian
+#     rev: v1.2.2
+#     hooks:
+#       - id: mcp-guardian
+#
+- id: mcp-guardian
+  name: MCP Guardian Security Scan
+  description: Scan MCP config for prompt injection vulnerabilities
+  entry: npx mcp-guardian --sync
+  language: system
+  files: claude_desktop_config\.json$
+  pass_filenames: true
+  stages: [commit, push]
+  types: [json]
+
+- id: mcp-guardian-critical-only
+  name: MCP Guardian (Critical Only)
+  description: Fail only on critical security issues
+  entry: npx mcp-guardian --sync --severity-threshold critical
+  language: system
+  files: claude_desktop_config\.json$
+  pass_filenames: true
+  stages: [commit]
+  types: [json]

@@ -105,6 +105,43 @@ if (pinResult.status === "changed") {
 | Sensitive paths | ~/.ssh, ~/.aws, /etc/passwd, .env, api_key |
 | Encoded content | Base64 strings, unicode escapes, hex encoding |
 
+## Pre-commit Integration
+
+### Using pre-commit framework
+
+Add to your `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/alexandriashai/mcp-guardian
+    rev: v1.2.2
+    hooks:
+      - id: mcp-guardian
+```
+
+### Using Husky
+
+Add to `.husky/pre-commit`:
+
+```bash
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+npx mcp-guardian --sync --quiet
+```
+
+### Using Lefthook
+
+Add to `lefthook.yml`:
+
+```yaml
+pre-commit:
+  commands:
+    mcp-guardian:
+      glob: "claude_desktop_config.json"
+      run: npx mcp-guardian --sync {staged_files}
+```
+
 ## Tool Pinning
 
 MCP Guardian includes tool definition pinning - SHA-256 hashing of tool definitions to detect tampering:

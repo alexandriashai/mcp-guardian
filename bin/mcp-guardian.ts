@@ -56,6 +56,8 @@ interface CliOptions {
   quiet: boolean;
   exitZero: boolean;
   severityThreshold: ScanSeverity;
+  servers: string[];
+  excludeServers: string[];
 }
 
 const VERSION = getVersion();
@@ -271,10 +273,26 @@ async function runCliScan(configPath: string | null, options: CliOptions): Promi
     console.error(`[mcp-guardian] Scanning: ${targetPath}`);
   }
 
+  // Server filter options
+  const filterOpts = {
+    servers: options.servers.length > 0 ? options.servers : undefined,
+    excludeServers: options.excludeServers.length > 0 ? options.excludeServers : undefined,
+  };
+
+  // Log server filter if active
+  if (!options.quiet) {
+    if (options.servers.length > 0) {
+      console.error(`[mcp-guardian] Filtering to servers: ${options.servers.join(", ")}`);
+    }
+    if (options.excludeServers.length > 0) {
+      console.error(`[mcp-guardian] Excluding servers: ${options.excludeServers.join(", ")}`);
+    }
+  }
+
   let result: ScanSummary;
   if (options.sync) {
     // Sync mode only parses config structure, doesn't query servers
-    result = scanMcpConfigSync(targetPath);
+    result = scanMcpConfigSync(targetPath, filterOpts);
     if (!options.quiet) {
       console.error(`[mcp-guardian] Note: --sync mode only reads config structure (no tool scanning)`);
     }
@@ -283,7 +301,7 @@ async function runCliScan(configPath: string | null, options: CliOptions): Promi
     if (!options.quiet) {
       console.error(`[mcp-guardian] Connecting to MCP servers to scan their tools...`);
     }
-    result = await scanMcpConfig(targetPath);
+    result = await scanMcpConfig(targetPath, filterOpts);
   }
 
   // Apply severity threshold filter
@@ -360,6 +378,8 @@ OPTIONS:
   --sarif                    Output SARIF 2.1.0 format (for GitHub Advanced Security)
   --sync                     Fast mode: only parse config, don't query servers
   --severity-threshold <lvl> Filter results: critical, warning (default), or info
+  --server <name>            Only scan specific server(s) (can be repeated)
+  --exclude-server <name>    Exclude server(s) from scan (can be repeated)
   --quiet                    Suppress output on clean scans (exit code still set)
   --exit-zero                Always exit with code 0 (for info-only mode)
   --version, -v              Show version
@@ -396,6 +416,12 @@ EXAMPLES:
   # Info mode: report but don't fail pipeline
   mcp-guardian --exit-zero
 
+  # Scan only specific server
+  mcp-guardian --server my-server
+
+  # Scan all except certain servers
+  mcp-guardian --exclude-server untrusted-server
+
 CLAUDE DESKTOP INTEGRATION:
   Add to your claude_desktop_config.json:
 
@@ -427,6 +453,19 @@ function parseSeverityThreshold(args: string[]): ScanSeverity {
 }
 
 /**
+ * Parse repeated flag values (e.g., --server a --server b)
+ */
+function parseRepeatedFlag(args: string[], flag: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === flag && i + 1 < args.length) {
+      values.push(args[i + 1]);
+    }
+  }
+  return values;
+}
+
+/**
  * Main entry point
  */
 async function main(): Promise<void> {
@@ -443,13 +482,16 @@ async function main(): Promise<void> {
     quiet: args.includes("--quiet"),
     exitZero: args.includes("--exit-zero"),
     severityThreshold: parseSeverityThreshold(args),
+    servers: parseRepeatedFlag(args, "--server"),
+    excludeServers: parseRepeatedFlag(args, "--exclude-server"),
   };
 
   // Filter out flags to get config path (skip flag values too)
+  const flagsWithValues = ["--severity-threshold", "--server", "--exclude-server"];
   const positionalArgs = args.filter((arg, idx) => {
     if (arg.startsWith("-")) return false;
-    // Skip values that follow --severity-threshold
-    if (idx > 0 && args[idx - 1] === "--severity-threshold") return false;
+    // Skip values that follow flags with values
+    if (idx > 0 && flagsWithValues.includes(args[idx - 1])) return false;
     return true;
   });
   const configPath = positionalArgs[0] || null;

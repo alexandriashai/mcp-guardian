@@ -124,9 +124,13 @@ export async function scanMcpConfig(
     timeout?: number;
     /** Skip servers that fail to connect (default: true) */
     skipFailures?: boolean;
+    /** Only scan these servers (if provided) */
+    servers?: string[];
+    /** Exclude these servers from scan */
+    excludeServers?: string[];
   } = {}
 ): Promise<ScanSummary> {
-  const { timeout = 10000, skipFailures = true } = options;
+  const { timeout = 10000, skipFailures = true, servers: includeServers, excludeServers } = options;
 
   const config = parseConfig(configPath);
   if (!config) {
@@ -150,6 +154,14 @@ export async function scanMcpConfig(
   }
 
   for (const [serverName, serverConfig] of Object.entries(config.mcpServers)) {
+    // Filter by include list
+    if (includeServers && includeServers.length > 0 && !includeServers.includes(serverName)) {
+      continue;
+    }
+    // Filter by exclude list
+    if (excludeServers && excludeServers.length > 0 && excludeServers.includes(serverName)) {
+      continue;
+    }
     console.error(`[mcp-guardian] Scanning server: ${serverName}`);
 
     const tools = await extractToolsFromServer(serverConfig, serverName, timeout);
@@ -195,9 +207,19 @@ export async function scanMcpConfig(
  * Does NOT query servers - use scanMcpConfig for full scanning.
  *
  * @param configPath - Path to claude_desktop_config.json
+ * @param options - Optional server filtering
  * @returns Summary with server names but no tool data
  */
-export function scanMcpConfigSync(configPath: string): ScanSummary {
+export function scanMcpConfigSync(
+  configPath: string,
+  options: {
+    /** Only include these servers (if provided) */
+    servers?: string[];
+    /** Exclude these servers from scan */
+    excludeServers?: string[];
+  } = {}
+): ScanSummary {
+  const { servers: includeServers, excludeServers } = options;
   const config = parseConfig(configPath);
   if (!config) {
     return {
@@ -206,11 +228,19 @@ export function scanMcpConfigSync(configPath: string): ScanSummary {
     };
   }
 
-  const servers: ServerScanResult[] = [];
+  const serverResults: ServerScanResult[] = [];
 
   if (config.mcpServers) {
     for (const serverName of Object.keys(config.mcpServers)) {
-      servers.push({
+      // Filter by include list
+      if (includeServers && includeServers.length > 0 && !includeServers.includes(serverName)) {
+        continue;
+      }
+      // Filter by exclude list
+      if (excludeServers && excludeServers.length > 0 && excludeServers.includes(serverName)) {
+        continue;
+      }
+      serverResults.push({
         serverName,
         toolCount: 0,
         status: "clean", // Cannot determine without querying server
@@ -220,7 +250,7 @@ export function scanMcpConfigSync(configPath: string): ScanSummary {
   }
 
   return {
-    servers,
+    servers: serverResults,
     summary: { total: 0, clean: 0, warning: 0, critical: 0 },
   };
 }
