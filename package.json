@@ -1,0 +1,61 @@
+{
+  "name": "@wfmedia/mcp-guardian",
+  "version": "1.0.0",
+  "description": "MCP security scanner - detect prompt injection in tool descriptions",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "bin": {
+    "mcp-guardian": "dist/bin/mcp-guardian.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js",
+      "require": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node --test",
+    "clean": "rm -rf dist/",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "security",
+    "prompt-injection",
+    "tool-scanning",
+    "claude",
+    "anthropic",
+    "ai-safety"
+  ],
+  "author": "Alexandria Eden",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexandriashai/mcp-guardian.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alexandriashai/mcp-guardian/issues"
+  },
+  "homepage": "https://github.com/alexandriashai/mcp-guardian#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "zod": "^3.23.0"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "typescript": "^5.9.3"
+  }
+}
