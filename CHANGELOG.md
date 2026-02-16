@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/alexandriashai/mcp-guardian/compare/v1.2.1...v1.2.2) (2026-02-16)
+
+
+### Bug Fixes
+
+* show detailed issue info and exit cleanly ([e8bc13f](https://github.com/alexandriashai/mcp-guardian/commit/e8bc13f619264ade15a76170639980dc903b6dcd))
+
 ## [1.2.1](https://github.com/alexandriashai/mcp-guardian/compare/v1.2.0...v1.2.1) (2026-02-16)
 
 
