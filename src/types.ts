@@ -1,5 +1,5 @@
 /**
- * @cbrowser/mcp-guardian - MCP Security Scanner
+ * mcp-guardian - MCP Security Scanner
  * Copyright 2026 Alexandria Eden
  * MIT License
  */

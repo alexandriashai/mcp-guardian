@@ -1,5 +1,5 @@
 /**
- * @cbrowser/mcp-guardian - Tool Definition Pinning
+ * mcp-guardian - Tool Definition Pinning
  * Copyright 2026 Alexandria Eden
  * MIT License
  */

@@ -1,5 +1,5 @@
 /**
- * @cbrowser/mcp-guardian
+ * mcp-guardian
  * MCP Security Scanner - detect prompt injection in tool descriptions
  *
  * Copyright 2026 Alexandria Eden

@@ -1,5 +1,5 @@
 /**
- * @cbrowser/mcp-guardian - Detection Patterns
+ * mcp-guardian - Detection Patterns
  * Copyright 2026 Alexandria Eden
  * MIT License
  */

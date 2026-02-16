@@ -1,5 +1,5 @@
 /**
- * @cbrowser/mcp-guardian - MCP Config Manifest Parsing
+ * mcp-guardian - MCP Config Manifest Parsing
  * Copyright 2026 Alexandria Eden
  * MIT License
  */

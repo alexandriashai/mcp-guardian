@@ -1,5 +1,5 @@
 /**
- * @cbrowser/mcp-guardian - Security Audit Tool Handler
+ * mcp-guardian - Security Audit Tool Handler
  * Copyright 2026 Alexandria Eden
  * MIT License
  */

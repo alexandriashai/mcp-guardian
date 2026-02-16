@@ -1,5 +1,5 @@
 /**
- * @cbrowser/mcp-guardian - Configuration
+ * mcp-guardian - Configuration
  * Copyright 2026 Alexandria Eden
  * MIT License
  */
