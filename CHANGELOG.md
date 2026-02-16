@@ -1,5 +1,12 @@
 # Changelog
 
+# [1.5.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.4.0...v1.5.0) (2026-02-16)
+
+
+### Features
+
+* add allowlist support and new MCP tools ([23d76e8](https://github.com/alexandriashai/mcp-guardian/commit/23d76e8667015b7a4da2a417d13d73d07526697a)), closes [#6](https://github.com/alexandriashai/mcp-guardian/issues/6) [#7](https://github.com/alexandriashai/mcp-guardian/issues/7) [#18](https://github.com/alexandriashai/mcp-guardian/issues/18)
+
 # [1.4.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.3.0...v1.4.0) (2026-02-16)
 
 
