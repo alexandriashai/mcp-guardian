@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/alexandriashai/mcp-guardian/compare/v2.2.0...v2.2.1) (2026-02-16)
+
+
+### Bug Fixes
+
+* **cli:** improve output formatting with checkmarks and icons ([308ebec](https://github.com/alexandriashai/mcp-guardian/commit/308ebecd3d71428c6235f16ace0b6ecbef391220))
+
 # [2.2.0](https://github.com/alexandriashai/mcp-guardian/compare/v2.1.0...v2.2.0) (2026-02-16)
 
 
