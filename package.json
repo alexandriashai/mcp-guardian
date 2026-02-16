@@ -1,5 +1,5 @@
 {
-  "name": "@wfmedia/mcp-guardian",
+  "name": "mcp-guardian",
   "version": "1.0.0",
   "description": "MCP security scanner - detect prompt injection in tool descriptions",
   "type": "module",
