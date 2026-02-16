@@ -5,7 +5,8 @@
  * MIT License
  */
 
-import { existsSync, readFileSync, watch } from "node:fs";
+import { existsSync, readFileSync, watch, writeFileSync } from "node:fs";
+import { join, dirname } from "node:path";
 import ora from "ora";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -48,6 +49,131 @@ const EXIT_CLEAN = 0;
 const EXIT_WARNING = 1;
 const EXIT_CRITICAL = 2;
 const EXIT_ERROR = 3;
+
+/**
+ * Configuration file interface
+ */
+interface ConfigFile {
+  configPath?: string;
+  severityThreshold?: ScanSeverity;
+  format?: "text" | "json" | "sarif";
+  watch?: boolean;
+  quiet?: boolean;
+  exitZero?: boolean;
+  sync?: boolean;
+  patternFile?: string;
+  patternFileOnly?: boolean;
+  allowlist?: string | string[];  // Can be file path or inline array
+  servers?: string[];
+  excludeServers?: string[];
+}
+
+/**
+ * Default config file names (in order of priority)
+ */
+const CONFIG_FILE_NAMES = [
+  ".mcp-guardian.json",
+  ".mcp-guardianrc",
+  ".mcp-guardianrc.json",
+  "mcp-guardian.config.json",
+];
+
+/**
+ * Template configuration for init command
+ */
+const CONFIG_TEMPLATE: ConfigFile = {
+  severityThreshold: "warning",
+  format: "text",
+  watch: false,
+  quiet: false,
+  exitZero: false,
+  sync: false,
+};
+
+/**
+ * Find config file in current directory or parent directories
+ */
+function findConfigFile(startDir: string = process.cwd()): string | null {
+  let currentDir = startDir;
+
+  while (currentDir !== dirname(currentDir)) {
+    for (const fileName of CONFIG_FILE_NAMES) {
+      const filePath = join(currentDir, fileName);
+      if (existsSync(filePath)) {
+        return filePath;
+      }
+    }
+    currentDir = dirname(currentDir);
+  }
+
+  // Check root directory
+  for (const fileName of CONFIG_FILE_NAMES) {
+    const filePath = join(currentDir, fileName);
+    if (existsSync(filePath)) {
+      return filePath;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Load and parse config file
+ */
+function loadConfigFile(filePath: string): ConfigFile {
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    const config = JSON.parse(content) as ConfigFile;
+
+    // Validate severityThreshold if present
+    if (config.severityThreshold &&
+        !["critical", "warning", "info"].includes(config.severityThreshold)) {
+      console.error(`Invalid severityThreshold in config: ${config.severityThreshold}`);
+      process.exit(EXIT_ERROR);
+    }
+
+    // Validate format if present
+    if (config.format &&
+        !["text", "json", "sarif"].includes(config.format)) {
+      console.error(`Invalid format in config: ${config.format}`);
+      process.exit(EXIT_ERROR);
+    }
+
+    return config;
+  } catch (error) {
+    console.error(`Failed to parse config file ${filePath}: ${(error as Error).message}`);
+    process.exit(EXIT_ERROR);
+  }
+}
+
+/**
+ * Merge config file settings with CLI options (CLI takes precedence)
+ */
+function mergeConfig(config: ConfigFile, cliOptions: Partial<CliOptions>, args: string[]): CliOptions {
+  // Check which options were explicitly set via CLI
+  const hasCliFlag = (flags: string[]): boolean =>
+    flags.some(flag => args.includes(flag));
+
+  return {
+    mcp: cliOptions.mcp || false,
+    json: hasCliFlag(["--json"]) ? (cliOptions.json || false) : (config.format === "json"),
+    sarif: hasCliFlag(["--sarif"]) ? (cliOptions.sarif || false) : (config.format === "sarif"),
+    sync: hasCliFlag(["--sync"]) ? (cliOptions.sync || false) : (config.sync || false),
+    help: cliOptions.help || false,
+    version: cliOptions.version || false,
+    quiet: hasCliFlag(["--quiet"]) ? (cliOptions.quiet || false) : (config.quiet || false),
+    exitZero: hasCliFlag(["--exit-zero"]) ? (cliOptions.exitZero || false) : (config.exitZero || false),
+    severityThreshold: hasCliFlag(["--severity-threshold"])
+      ? (cliOptions.severityThreshold || "warning")
+      : (config.severityThreshold || "warning"),
+    servers: (cliOptions.servers?.length || 0) > 0 ? cliOptions.servers! : (config.servers || []),
+    excludeServers: (cliOptions.excludeServers?.length || 0) > 0 ? cliOptions.excludeServers! : (config.excludeServers || []),
+    allowlistFile: cliOptions.allowlistFile || (typeof config.allowlist === "string" ? config.allowlist : null),
+    patternFile: cliOptions.patternFile || config.patternFile || null,
+    patternFileOnly: hasCliFlag(["--pattern-file-only"]) ? (cliOptions.patternFileOnly || false) : (config.patternFileOnly || false),
+    watch: hasCliFlag(["--watch"]) ? (cliOptions.watch || false) : (config.watch || false),
+  };
+}
 
 /**
  * CLI options interface
@@ -592,8 +718,13 @@ OPTIONS:
   --watch                    Watch config file for changes and re-scan
   --quiet                    Suppress output on clean scans (exit code still set)
   --exit-zero                Always exit with code 0 (for info-only mode)
+  --config <file>            Use specific config file (default: auto-discover)
+  --no-config                Ignore config files
   --version, -v              Show version
   --help, -h                 Show this help
+
+COMMANDS:
+  init                       Create template .mcp-guardian.json config file
 
 EXIT CODES:
   0  Clean scan (no issues found)
@@ -641,6 +772,27 @@ EXAMPLES:
   # Watch for config changes
   mcp-guardian --watch
 
+  # Create config file
+  mcp-guardian init
+
+  # Use specific config file
+  mcp-guardian --config ./custom-config.json
+
+  # Ignore config files
+  mcp-guardian --no-config
+
+CONFIG FILE (.mcp-guardian.json):
+  {
+    "configPath": "path/to/claude_desktop_config.json",
+    "severityThreshold": "warning",
+    "format": "text",
+    "watch": false,
+    "quiet": false,
+    "patternFile": "./custom-patterns.json",
+    "servers": ["my-server"],
+    "excludeServers": ["untrusted-server"]
+  }
+
 CLAUDE DESKTOP INTEGRATION:
   Add to your claude_desktop_config.json:
 
@@ -653,6 +805,34 @@ CLAUDE DESKTOP INTEGRATION:
     }
   }
 `);
+}
+
+/**
+ * Run init command - create template config file
+ */
+function runInit(): void {
+  const targetPath = join(process.cwd(), ".mcp-guardian.json");
+
+  if (existsSync(targetPath)) {
+    console.error(`Config file already exists: ${targetPath}`);
+    console.error(`Remove it first if you want to regenerate.`);
+    process.exit(EXIT_ERROR);
+  }
+
+  const configWithComments = {
+    "$schema": "https://raw.githubusercontent.com/alexandriashai/mcp-guardian/main/schemas/config.schema.json",
+    ...CONFIG_TEMPLATE,
+    _comment: "See: https://github.com/alexandriashai/mcp-guardian#configuration",
+  };
+
+  try {
+    writeFileSync(targetPath, JSON.stringify(configWithComments, null, 2) + "\n", "utf-8");
+    console.log(`Created ${targetPath}`);
+    console.log(`\nEdit this file to customize mcp-guardian behavior.`);
+  } catch (error) {
+    console.error(`Failed to create config file: ${(error as Error).message}`);
+    process.exit(EXIT_ERROR);
+  }
 }
 
 /**
@@ -771,8 +951,14 @@ function loadPatternFile(filePath: string): CustomPatternDef[] {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
-  // Parse options
-  const options: CliOptions = {
+  // Handle init command first
+  if (args[0] === "init") {
+    runInit();
+    return;
+  }
+
+  // Parse CLI options (before config file merge)
+  const cliOptions: Partial<CliOptions> = {
     mcp: args.includes("--mcp"),
     json: args.includes("--json"),
     sarif: args.includes("--sarif"),
@@ -790,15 +976,45 @@ async function main(): Promise<void> {
     watch: args.includes("--watch"),
   };
 
+  // Load config file (unless --no-config or certain modes)
+  let fileConfig: ConfigFile = {};
+  const noConfig = args.includes("--no-config");
+  const explicitConfigPath = parseSingleFlag(args, "--config");
+
+  if (!noConfig && !cliOptions.help && !cliOptions.version && !cliOptions.mcp) {
+    let configFilePath: string | null = null;
+
+    if (explicitConfigPath) {
+      if (!existsSync(explicitConfigPath)) {
+        console.error(`Config file not found: ${explicitConfigPath}`);
+        process.exit(EXIT_ERROR);
+      }
+      configFilePath = explicitConfigPath;
+    } else {
+      configFilePath = findConfigFile();
+    }
+
+    if (configFilePath) {
+      fileConfig = loadConfigFile(configFilePath);
+      if (!cliOptions.quiet) {
+        console.error(`[mcp-guardian] Using config: ${configFilePath}`);
+      }
+    }
+  }
+
+  // Merge config file with CLI options (CLI takes precedence)
+  const options = mergeConfig(fileConfig, cliOptions, args);
+
   // Filter out flags to get config path (skip flag values too)
-  const flagsWithValues = ["--severity-threshold", "--server", "--exclude-server", "--allowlist", "--pattern-file"];
+  const flagsWithValues = ["--severity-threshold", "--server", "--exclude-server", "--allowlist", "--pattern-file", "--config"];
   const positionalArgs = args.filter((arg, idx) => {
     if (arg.startsWith("-")) return false;
     // Skip values that follow flags with values
     if (idx > 0 && flagsWithValues.includes(args[idx - 1])) return false;
     return true;
   });
-  const configPath = positionalArgs[0] || null;
+  // Use configPath from config file if not specified on CLI
+  const configPath = positionalArgs[0] || fileConfig.configPath || null;
 
   if (options.version) {
     console.log(VERSION);
