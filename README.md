@@ -1,4 +1,4 @@
-# @cbrowser/mcp-guardian
+# mcp-guardian
 
 MCP security scanner that detects prompt injection attacks in tool descriptions.
 
@@ -14,7 +14,7 @@ MCP security scanner that detects prompt injection attacks in tool descriptions.
 ## Installation
 
 ```bash
-npm install @cbrowser/mcp-guardian
+npm install mcp-guardian
 ```
 
 ## Usage
@@ -23,19 +23,19 @@ npm install @cbrowser/mcp-guardian
 
 ```bash
 # Auto-detect Claude Desktop config
-npx @cbrowser/mcp-guardian
+npx mcp-guardian
 
 # Explicit config path
-npx @cbrowser/mcp-guardian /path/to/claude_desktop_config.json
+npx mcp-guardian /path/to/claude_desktop_config.json
 
 # JSON output
-npx @cbrowser/mcp-guardian --json
+npx mcp-guardian --json
 ```
 
 ### CLI - Run as MCP Server
 
 ```bash
-npx @cbrowser/mcp-guardian --mcp
+npx mcp-guardian --mcp
 ```
 
 ### Claude Desktop Integration
@@ -47,7 +47,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "mcp-guardian": {
       "command": "npx",
-      "args": ["-y", "@cbrowser/mcp-guardian", "--mcp"]
+      "args": ["-y", "mcp-guardian", "--mcp"]
     }
   }
 }
@@ -61,7 +61,7 @@ import {
   scanToolDefinitions,
   isDescriptionSafe,
   verifyToolDefinitions,
-} from "@cbrowser/mcp-guardian";
+} from "mcp-guardian";
 
 // Scan a single tool description
 const result = scanToolDescription("my_tool", "Tool description here");
@@ -110,7 +110,7 @@ if (pinResult.status === "changed") {
 MCP Guardian includes tool definition pinning - SHA-256 hashing of tool definitions to detect tampering:
 
 ```typescript
-import { verifyToolDefinitions, approveAllTools } from "@cbrowser/mcp-guardian";
+import { verifyToolDefinitions, approveAllTools } from "mcp-guardian";
 
 // Verify tools against stored baseline
 const result = verifyToolDefinitions(tools);
