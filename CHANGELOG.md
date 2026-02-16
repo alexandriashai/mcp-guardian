@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/alexandriashai/mcp-guardian/compare/v1.2.0...v1.2.1) (2026-02-16)
+
+
+### Bug Fixes
+
+* make async scanning the default for CLI ([d02578a](https://github.com/alexandriashai/mcp-guardian/commit/d02578aeaa2556c4f7b688022af9d2b19c8b1e84))
+
 # [1.2.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.1.0...v1.2.0) (2026-02-16)
 
 
