@@ -1,5 +1,22 @@
 # Changelog
 
+# [2.0.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.9.0...v2.0.0) (2026-02-16)
+
+
+### Features
+
+* **pinning:** add multi-server manifest support ([b0a72e7](https://github.com/alexandriashai/mcp-guardian/commit/b0a72e702e0bb8c966ae4e2d203575037a9bb2a5)), closes [#13](https://github.com/alexandriashai/mcp-guardian/issues/13)
+
+
+### BREAKING CHANGES
+
+* **pinning:** Manifest format changed from:
+  { server, version, pinnedAt, tools }
+to:
+  { format, version, servers: { [name]: { pinnedAt, tools } } }
+
+Migration is automatic on first load.
+
 # [1.9.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.8.0...v1.9.0) (2026-02-16)
 
 
