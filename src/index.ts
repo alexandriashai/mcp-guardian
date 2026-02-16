@@ -38,6 +38,8 @@ export {
   scanToolDefinitions,
   formatScanReport,
   isDescriptionSafe,
+  setAllowlist,
+  getAllowlist,
 } from "./patterns.js";
 
 // Tool pinning

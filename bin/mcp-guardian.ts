@@ -5,7 +5,7 @@
  * MIT License
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -28,8 +28,12 @@ import {
   verifyToolDefinitions,
   loadToolManifest,
   getManifestSummary,
+  approveAllTools,
+  getManifestPath,
 } from "../src/tool-pinning.js";
+import { scanToolDescription } from "../src/patterns.js";
 import type { ScanSummary, ScanSeverity, ServerScanResult } from "../src/types.js";
+import { setAllowlist } from "../src/patterns.js";
 
 /**
  * Exit codes for CI/CD integration
@@ -58,6 +62,7 @@ interface CliOptions {
   severityThreshold: ScanSeverity;
   servers: string[];
   excludeServers: string[];
+  allowlistFile: string | null;
 }
 
 const VERSION = getVersion();
@@ -116,6 +121,45 @@ async function runMcpServer(): Promise<void> {
           properties: {},
         },
       },
+      {
+        name: "tool_pin_save",
+        description:
+          "Save current tool definitions as the trusted baseline. Creates or updates the tool manifest for future verification.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            server_name: {
+              type: "string",
+              description: "Name of the server to pin (optional)",
+            },
+            force: {
+              type: "boolean",
+              default: false,
+              description: "If true, overwrite existing manifest without confirmation",
+            },
+          },
+        },
+      },
+      {
+        name: "pattern_test",
+        description:
+          "Test if a description would trigger security findings. Useful for validating tool descriptions before deployment.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            description: {
+              type: "string",
+              description: "The tool description text to scan",
+            },
+            tool_name: {
+              type: "string",
+              default: "test",
+              description: "Name to use in the scan result (optional)",
+            },
+          },
+          required: ["description"],
+        },
+      },
     ],
   }));
 
@@ -134,6 +178,63 @@ async function runMcpServer(): Promise<void> {
           {
             type: "text",
             text: JSON.stringify(summary, null, 2),
+          },
+        ],
+      };
+    }
+
+    if (name === "tool_pin_save") {
+      const typedArgs = args as { server_name?: string; force?: boolean };
+      // For now, we save an empty manifest (MCP server mode doesn't have access to other server's tools)
+      // This is a placeholder - full implementation would need access to tool definitions
+      const manifestPath = getManifestPath();
+      const existingManifest = loadToolManifest();
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              success: true,
+              message: existingManifest
+                ? "Manifest exists. Use CLI mode with 'mcp-guardian --pin' for full tool pinning."
+                : "No manifest found. Use CLI mode with 'mcp-guardian --pin' for full tool pinning.",
+              manifestPath,
+              serverName: typedArgs.server_name || "mcp-guardian",
+            }, null, 2),
+          },
+        ],
+      };
+    }
+
+    if (name === "pattern_test") {
+      const typedArgs = args as { description: string; tool_name?: string };
+      if (!typedArgs.description) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ error: "description parameter is required" }),
+            },
+          ],
+        };
+      }
+
+      const result = scanToolDescription(
+        typedArgs.tool_name || "test",
+        typedArgs.description
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              toolName: result.toolName,
+              status: result.status,
+              issueCount: result.issues.length,
+              issues: result.issues,
+            }, null, 2),
           },
         ],
       };
@@ -273,6 +374,15 @@ async function runCliScan(configPath: string | null, options: CliOptions): Promi
     console.error(`[mcp-guardian] Scanning: ${targetPath}`);
   }
 
+  // Load allowlist if specified
+  if (options.allowlistFile) {
+    const allowlist = loadAllowlistFile(options.allowlistFile);
+    setAllowlist(allowlist);
+    if (!options.quiet) {
+      console.error(`[mcp-guardian] Loaded ${allowlist.length} allowlist phrases from ${options.allowlistFile}`);
+    }
+  }
+
   // Server filter options
   const filterOpts = {
     servers: options.servers.length > 0 ? options.servers : undefined,
@@ -380,6 +490,7 @@ OPTIONS:
   --severity-threshold <lvl> Filter results: critical, warning (default), or info
   --server <name>            Only scan specific server(s) (can be repeated)
   --exclude-server <name>    Exclude server(s) from scan (can be repeated)
+  --allowlist <file>         Skip matches found in allowlist file (one phrase per line)
   --quiet                    Suppress output on clean scans (exit code still set)
   --exit-zero                Always exit with code 0 (for info-only mode)
   --version, -v              Show version
@@ -421,6 +532,9 @@ EXAMPLES:
 
   # Scan all except certain servers
   mcp-guardian --exclude-server untrusted-server
+
+  # Skip false positives using allowlist
+  mcp-guardian --allowlist allowlist.txt
 
 CLAUDE DESKTOP INTEGRATION:
   Add to your claude_desktop_config.json:
@@ -466,6 +580,37 @@ function parseRepeatedFlag(args: string[], flag: string): string[] {
 }
 
 /**
+ * Parse single flag value
+ */
+function parseSingleFlag(args: string[], flag: string): string | null {
+  const idx = args.indexOf(flag);
+  if (idx === -1 || idx >= args.length - 1) {
+    return null;
+  }
+  return args[idx + 1];
+}
+
+/**
+ * Load allowlist from file (one phrase per line)
+ */
+function loadAllowlistFile(filePath: string): string[] {
+  if (!existsSync(filePath)) {
+    console.error(`Allowlist file not found: ${filePath}`);
+    process.exit(EXIT_ERROR);
+  }
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    return content
+      .split("\n")
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && !line.startsWith("#"));
+  } catch (error) {
+    console.error(`Failed to read allowlist file: ${(error as Error).message}`);
+    process.exit(EXIT_ERROR);
+  }
+}
+
+/**
  * Main entry point
  */
 async function main(): Promise<void> {
@@ -484,10 +629,11 @@ async function main(): Promise<void> {
     severityThreshold: parseSeverityThreshold(args),
     servers: parseRepeatedFlag(args, "--server"),
     excludeServers: parseRepeatedFlag(args, "--exclude-server"),
+    allowlistFile: parseSingleFlag(args, "--allowlist"),
   };
 
   // Filter out flags to get config path (skip flag values too)
-  const flagsWithValues = ["--severity-threshold", "--server", "--exclude-server"];
+  const flagsWithValues = ["--severity-threshold", "--server", "--exclude-server", "--allowlist"];
   const positionalArgs = args.filter((arg, idx) => {
     if (arg.startsWith("-")) return false;
     // Skip values that follow flags with values

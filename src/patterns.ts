@@ -222,6 +222,39 @@ export const ALL_PATTERNS: DetectionPattern[] = [
 // ============================================================================
 
 /**
+ * Global allowlist for false positive suppression.
+ * Phrases in this list will not trigger findings even if they match patterns.
+ */
+let globalAllowlist: string[] = [];
+
+/**
+ * Set the global allowlist.
+ *
+ * @param phrases - Array of phrases to allow (case-insensitive matching)
+ */
+export function setAllowlist(phrases: string[]): void {
+  globalAllowlist = phrases.map(p => p.toLowerCase());
+}
+
+/**
+ * Get the current allowlist.
+ */
+export function getAllowlist(): string[] {
+  return [...globalAllowlist];
+}
+
+/**
+ * Check if a match is allowlisted.
+ *
+ * @param match - The matched text to check
+ * @returns true if the match should be skipped
+ */
+function isAllowlisted(match: string): boolean {
+  const lowerMatch = match.toLowerCase();
+  return globalAllowlist.some(phrase => lowerMatch.includes(phrase) || phrase.includes(lowerMatch));
+}
+
+/**
  * Scan a single tool's description for injection patterns.
  *
  * @param name - The tool's name
@@ -241,6 +274,11 @@ export function scanToolDescription(
     let match;
 
     while ((match = globalRegex.exec(description)) !== null) {
+      // Skip if match is allowlisted
+      if (isAllowlisted(match[0])) {
+        continue;
+      }
+
       issues.push({
         pattern: pattern.pattern,
         severity: pattern.severity,
