@@ -58,7 +58,7 @@ const EXIT_ERROR = 3;
 interface ConfigFile {
   configPath?: string;
   severityThreshold?: ScanSeverity;
-  format?: "text" | "json" | "sarif";
+  format?: "text" | "json" | "sarif" | "html";
   watch?: boolean;
   quiet?: boolean;
   exitZero?: boolean;
@@ -136,7 +136,7 @@ function loadConfigFile(filePath: string): ConfigFile {
 
     // Validate format if present
     if (config.format &&
-        !["text", "json", "sarif"].includes(config.format)) {
+        !["text", "json", "sarif", "html"].includes(config.format)) {
       console.error(`Invalid format in config: ${config.format}`);
       process.exit(EXIT_ERROR);
     }
@@ -160,6 +160,7 @@ function mergeConfig(config: ConfigFile, cliOptions: Partial<CliOptions>, args: 
     mcp: cliOptions.mcp || false,
     json: hasCliFlag(["--json"]) ? (cliOptions.json || false) : (config.format === "json"),
     sarif: hasCliFlag(["--sarif"]) ? (cliOptions.sarif || false) : (config.format === "sarif"),
+    html: hasCliFlag(["--html"]) ? (cliOptions.html || false) : (config.format === "html"),
     sync: hasCliFlag(["--sync"]) ? (cliOptions.sync || false) : (config.sync || false),
     help: cliOptions.help || false,
     version: cliOptions.version || false,
@@ -184,6 +185,7 @@ interface CliOptions {
   mcp: boolean;
   json: boolean;
   sarif: boolean;
+  html: boolean;
   sync: boolean;
   help: boolean;
   version: boolean;
@@ -549,6 +551,257 @@ function generateSarif(result: ScanSummary, configPath: string): object {
 }
 
 /**
+ * Escape HTML special characters
+ */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
+ * Generate self-contained HTML report
+ */
+function generateHtmlReport(result: ScanSummary, configPath: string): string {
+  const timestamp = new Date().toISOString();
+  const totalIssues = result.summary.warning + result.summary.critical;
+
+  // Build issues HTML
+  let issuesHtml = "";
+  for (const server of result.servers) {
+    if (server.issues.length === 0) continue;
+
+    issuesHtml += `
+      <div class="server">
+        <div class="server-header">
+          <span class="status-badge status-${server.status}">${server.status.toUpperCase()}</span>
+          <span class="server-name">${escapeHtml(server.serverName)}</span>
+          <span class="tool-count">${server.toolCount} tools</span>
+        </div>
+        <div class="tools">`;
+
+    for (const tool of server.issues) {
+      issuesHtml += `
+          <div class="tool">
+            <div class="tool-name">${escapeHtml(tool.toolName)}</div>
+            <div class="issues">`;
+
+      for (const issue of tool.issues) {
+        issuesHtml += `
+              <div class="issue issue-${issue.severity}">
+                <span class="severity">${issue.severity.toUpperCase()}</span>
+                <span class="pattern">${escapeHtml(issue.pattern)}</span>
+                <div class="match">Match: <code>${escapeHtml(issue.match)}</code></div>
+                ${issue.position !== undefined ? `<div class="position">Position: ${issue.position}</div>` : ""}
+              </div>`;
+      }
+
+      issuesHtml += `
+            </div>
+          </div>`;
+    }
+
+    issuesHtml += `
+        </div>
+      </div>`;
+  }
+
+  if (!issuesHtml) {
+    issuesHtml = '<div class="no-issues">No issues detected</div>';
+  }
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Guardian Security Report</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --card-bg: #16213e;
+      --text: #e4e4e4;
+      --text-dim: #888;
+      --critical: #ff4757;
+      --warning: #ffa502;
+      --clean: #2ed573;
+      --border: #2d3a5a;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f5f5f5;
+        --card-bg: #fff;
+        --text: #333;
+        --text-dim: #666;
+        --border: #ddd;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    h1::before { content: "🛡️"; }
+    .meta {
+      color: var(--text-dim);
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .stat {
+      background: var(--card-bg);
+      padding: 1.5rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      text-align: center;
+    }
+    .stat-value { font-size: 2.5rem; font-weight: bold; }
+    .stat-label { color: var(--text-dim); font-size: 0.875rem; }
+    .stat-critical .stat-value { color: var(--critical); }
+    .stat-warning .stat-value { color: var(--warning); }
+    .stat-clean .stat-value { color: var(--clean); }
+    .server {
+      background: var(--card-bg);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+    .server-header {
+      padding: 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .server-name { font-weight: 600; }
+    .tool-count { color: var(--text-dim); margin-left: auto; }
+    .status-badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .status-critical { background: var(--critical); color: #fff; }
+    .status-warning { background: var(--warning); color: #000; }
+    .status-clean { background: var(--clean); color: #000; }
+    .tools { padding: 1rem; }
+    .tool { margin-bottom: 1rem; }
+    .tool:last-child { margin-bottom: 0; }
+    .tool-name { font-weight: 500; margin-bottom: 0.5rem; }
+    .issue {
+      padding: 0.75rem;
+      border-radius: 4px;
+      margin-bottom: 0.5rem;
+      border-left: 4px solid;
+    }
+    .issue-critical {
+      background: rgba(255, 71, 87, 0.1);
+      border-color: var(--critical);
+    }
+    .issue-warning {
+      background: rgba(255, 165, 2, 0.1);
+      border-color: var(--warning);
+    }
+    .severity {
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-right: 0.5rem;
+    }
+    .pattern { font-weight: 500; }
+    .match, .position {
+      font-size: 0.875rem;
+      color: var(--text-dim);
+      margin-top: 0.25rem;
+    }
+    code {
+      background: var(--border);
+      padding: 0.125rem 0.375rem;
+      border-radius: 3px;
+      font-family: 'SF Mono', Consolas, monospace;
+    }
+    .no-issues {
+      text-align: center;
+      padding: 3rem;
+      color: var(--clean);
+      font-size: 1.25rem;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 0.875rem;
+    }
+    @media print {
+      body { background: #fff; color: #000; }
+      .stat, .server { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>MCP Guardian Security Report</h1>
+    <div class="meta">
+      <div>Config: ${escapeHtml(configPath)}</div>
+      <div>Generated: ${timestamp}</div>
+      <div>Version: ${VERSION}</div>
+    </div>
+
+    <div class="summary">
+      <div class="stat">
+        <div class="stat-value">${result.servers.length}</div>
+        <div class="stat-label">Servers</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">${result.summary.total}</div>
+        <div class="stat-label">Tools Scanned</div>
+      </div>
+      <div class="stat stat-critical">
+        <div class="stat-value">${result.summary.critical}</div>
+        <div class="stat-label">Critical</div>
+      </div>
+      <div class="stat stat-warning">
+        <div class="stat-value">${result.summary.warning}</div>
+        <div class="stat-label">Warning</div>
+      </div>
+      <div class="stat stat-clean">
+        <div class="stat-value">${result.summary.clean}</div>
+        <div class="stat-label">Clean</div>
+      </div>
+    </div>
+
+    ${issuesHtml}
+
+    <div class="footer">
+      Generated by <a href="https://github.com/alexandriashai/mcp-guardian">@cbrowser/mcp-guardian</a> v${VERSION}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+/**
  * Run CLI scan
  */
 async function runCliScan(configPath: string | null, options: CliOptions): Promise<void> {
@@ -608,8 +861,8 @@ async function runCliScan(configPath: string | null, options: CliOptions): Promi
     }
   }
 
-  // Determine if we should show spinner (TTY, not JSON/SARIF, not quiet)
-  const showSpinner = process.stderr.isTTY && !options.json && !options.sarif && !options.quiet;
+  // Determine if we should show spinner (TTY, not JSON/SARIF/HTML, not quiet)
+  const showSpinner = process.stderr.isTTY && !options.json && !options.sarif && !options.html && !options.quiet;
 
   let result: ScanSummary;
   if (options.sync) {
@@ -662,6 +915,8 @@ async function runCliScan(configPath: string | null, options: CliOptions): Promi
   // Output results
   if (options.sarif) {
     console.log(JSON.stringify(generateSarif(filteredResult, targetPath), null, 2));
+  } else if (options.html) {
+    console.log(generateHtmlReport(filteredResult, targetPath));
   } else if (options.json) {
     console.log(JSON.stringify(filteredResult, null, 2));
   } else {
@@ -720,6 +975,7 @@ OPTIONS:
   --mcp                      Run as MCP server (for Claude Desktop integration)
   --json                     Output JSON instead of human-readable format
   --sarif                    Output SARIF 2.1.0 format (for GitHub Advanced Security)
+  --html                     Output self-contained HTML report
   --sync                     Fast mode: only parse config, don't query servers
   --severity-threshold <lvl> Filter results: critical, warning (default), or info
   --server <name>            Only scan specific server(s) (can be repeated)
@@ -761,6 +1017,9 @@ EXAMPLES:
 
   # SARIF output for GitHub Advanced Security
   mcp-guardian --sarif > results.sarif
+
+  # HTML report (self-contained, print-friendly)
+  mcp-guardian --html > report.html
 
   # Only show critical issues
   mcp-guardian --severity-threshold critical
@@ -1015,6 +1274,7 @@ async function main(): Promise<void> {
     mcp: args.includes("--mcp"),
     json: args.includes("--json"),
     sarif: args.includes("--sarif"),
+    html: args.includes("--html"),
     sync: args.includes("--sync"),
     help: args.includes("--help") || args.includes("-h"),
     version: args.includes("--version") || args.includes("-v"),
