@@ -1,5 +1,12 @@
 # Changelog
 
+# [2.2.0](https://github.com/alexandriashai/mcp-guardian/compare/v2.1.0...v2.2.0) (2026-02-16)
+
+
+### Features
+
+* **cli:** add HTML report output format ([fb83c1b](https://github.com/alexandriashai/mcp-guardian/commit/fb83c1b3c29c0c2a0b71e0638a91cb1bf15f43f7)), closes [#14](https://github.com/alexandriashai/mcp-guardian/issues/14)
+
 # [2.1.0](https://github.com/alexandriashai/mcp-guardian/compare/v2.0.0...v2.1.0) (2026-02-16)
 
 
