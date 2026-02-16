@@ -1,6 +1,6 @@
 {
   "name": "mcp-guardian",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "MCP security scanner - detect prompt injection in tool descriptions",
   "type": "module",
   "main": "dist/src/index.js",

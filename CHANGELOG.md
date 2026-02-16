@@ -1,5 +1,12 @@
 # Changelog
 
+# [1.6.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.5.0...v1.6.0) (2026-02-16)
+
+
+### Features
+
+* add GitHub Action, progress spinner, and custom patterns ([e6d407c](https://github.com/alexandriashai/mcp-guardian/commit/e6d407cb247944f2a97b1d15e057534804787913)), closes [#3](https://github.com/alexandriashai/mcp-guardian/issues/3) [#5](https://github.com/alexandriashai/mcp-guardian/issues/5) [#17](https://github.com/alexandriashai/mcp-guardian/issues/17)
+
 # [1.5.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.4.0...v1.5.0) (2026-02-16)
 
 
