@@ -58,6 +58,9 @@ export {
   removeToolFromManifest,
   approveAllTools,
   getManifestSummary,
+  getToolDiff,
+  type ToolDiff,
+  type ToolDiffEntry,
 } from "./tool-pinning.js";
 
 // MCP config scanning

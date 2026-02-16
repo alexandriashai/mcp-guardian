@@ -345,3 +345,92 @@ export function getManifestSummary(): {
     pinnedAt: manifest.pinnedAt,
   };
 }
+
+/**
+ * Tool diff entry showing what changed for a single tool
+ */
+export interface ToolDiffEntry {
+  name: string;
+  previousDescriptionLength: number;
+  currentDescriptionLength: number;
+  previousHash: string;
+  currentHash: string;
+  previousPinnedAt: string;
+}
+
+/**
+ * Complete diff result between current tools and manifest
+ */
+export interface ToolDiff {
+  added: string[];
+  removed: string[];
+  changed: ToolDiffEntry[];
+  unchanged: number;
+  manifestExists: boolean;
+}
+
+/**
+ * Get detailed diff between current tools and the pinned manifest.
+ *
+ * @param tools - Current tool definitions
+ * @returns Detailed diff showing added, removed, and changed tools
+ */
+export function getToolDiff(tools: ToolDefinition[]): ToolDiff {
+  const manifest = loadToolManifest();
+
+  if (!manifest) {
+    return {
+      added: tools.map(t => t.name),
+      removed: [],
+      changed: [],
+      unchanged: 0,
+      manifestExists: false,
+    };
+  }
+
+  const currentToolNames = new Set(tools.map(t => t.name));
+  const pinnedToolNames = new Set(Object.keys(manifest.tools));
+
+  const added: string[] = [];
+  const removed: string[] = [];
+  const changed: ToolDiffEntry[] = [];
+  let unchanged = 0;
+
+  // Check each current tool
+  for (const tool of tools) {
+    const pinEntry = manifest.tools[tool.name];
+
+    if (!pinEntry) {
+      added.push(tool.name);
+    } else {
+      const currentHash = hashToolDefinition(tool.name, tool.description, tool.schema);
+      if (currentHash !== pinEntry.hash) {
+        changed.push({
+          name: tool.name,
+          previousDescriptionLength: pinEntry.descriptionLength,
+          currentDescriptionLength: tool.description.length,
+          previousHash: pinEntry.hash,
+          currentHash,
+          previousPinnedAt: pinEntry.pinnedAt,
+        });
+      } else {
+        unchanged++;
+      }
+    }
+  }
+
+  // Check for removed tools
+  for (const pinnedName of pinnedToolNames) {
+    if (!currentToolNames.has(pinnedName)) {
+      removed.push(pinnedName);
+    }
+  }
+
+  return {
+    added,
+    removed,
+    changed,
+    unchanged,
+    manifestExists: true,
+  };
+}

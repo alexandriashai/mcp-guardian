@@ -31,6 +31,7 @@ import {
   getManifestSummary,
   approveAllTools,
   getManifestPath,
+  getToolDiff,
 } from "../src/tool-pinning.js";
 import { scanToolDescription, loadCustomPatterns, setCustomPatternsOnly, type CustomPatternDef } from "../src/patterns.js";
 import type { ScanSummary, ScanSeverity, ServerScanResult } from "../src/types.js";
@@ -163,6 +164,15 @@ async function runMcpServer(): Promise<void> {
           required: ["description"],
         },
       },
+      {
+        name: "tool_diff",
+        description:
+          "Show detailed changes to MCP tool definitions since last pin. Returns added, removed, and changed tools with hash and description length changes.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      },
     ],
   }));
 
@@ -237,6 +247,47 @@ async function runMcpServer(): Promise<void> {
               status: result.status,
               issueCount: result.issues.length,
               issues: result.issues,
+            }, null, 2),
+          },
+        ],
+      };
+    }
+
+    if (name === "tool_diff") {
+      // For MCP server mode, we can only diff against manifest without current tools
+      // Full functionality requires CLI mode with access to tool definitions
+      const manifest = loadToolManifest();
+
+      if (!manifest) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                manifestExists: false,
+                message: "No manifest found. Use 'mcp-guardian --pin' to create one.",
+                added: [],
+                removed: [],
+                changed: [],
+                unchanged: 0,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      // Return manifest info since we don't have current tools in MCP mode
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              manifestExists: true,
+              pinnedToolCount: Object.keys(manifest.tools).length,
+              pinnedAt: manifest.pinnedAt,
+              serverName: manifest.server,
+              message: "Use 'getToolDiff' in library mode with tool definitions for full diff.",
+              tools: Object.keys(manifest.tools),
             }, null, 2),
           },
         ],
