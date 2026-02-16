@@ -6,6 +6,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
+import ora from "ora";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -31,7 +32,7 @@ import {
   approveAllTools,
   getManifestPath,
 } from "../src/tool-pinning.js";
-import { scanToolDescription } from "../src/patterns.js";
+import { scanToolDescription, loadCustomPatterns, setCustomPatternsOnly, type CustomPatternDef } from "../src/patterns.js";
 import type { ScanSummary, ScanSeverity, ServerScanResult } from "../src/types.js";
 import { setAllowlist } from "../src/patterns.js";
 
@@ -63,6 +64,8 @@ interface CliOptions {
   servers: string[];
   excludeServers: string[];
   allowlistFile: string | null;
+  patternFile: string | null;
+  patternFileOnly: boolean;
 }
 
 const VERSION = getVersion();
@@ -383,6 +386,22 @@ async function runCliScan(configPath: string | null, options: CliOptions): Promi
     }
   }
 
+  // Load custom patterns if specified
+  if (options.patternFile) {
+    const patterns = loadPatternFile(options.patternFile);
+    loadCustomPatterns(patterns);
+    if (options.patternFileOnly) {
+      setCustomPatternsOnly(true);
+      if (!options.quiet) {
+        console.error(`[mcp-guardian] Using ${patterns.length} custom patterns only (built-in disabled)`);
+      }
+    } else {
+      if (!options.quiet) {
+        console.error(`[mcp-guardian] Loaded ${patterns.length} custom patterns (merged with built-in)`);
+      }
+    }
+  }
+
   // Server filter options
   const filterOpts = {
     servers: options.servers.length > 0 ? options.servers : undefined,
@@ -399,6 +418,9 @@ async function runCliScan(configPath: string | null, options: CliOptions): Promi
     }
   }
 
+  // Determine if we should show spinner (TTY, not JSON/SARIF, not quiet)
+  const showSpinner = process.stderr.isTTY && !options.json && !options.sarif && !options.quiet;
+
   let result: ScanSummary;
   if (options.sync) {
     // Sync mode only parses config structure, doesn't query servers
@@ -408,10 +430,27 @@ async function runCliScan(configPath: string | null, options: CliOptions): Promi
     }
   } else {
     // Default: async mode that actually queries MCP servers
-    if (!options.quiet) {
-      console.error(`[mcp-guardian] Connecting to MCP servers to scan their tools...`);
+    const spinner = showSpinner ? ora("Connecting to MCP servers...").start() : null;
+
+    try {
+      result = await scanMcpConfig(targetPath, {
+        ...filterOpts,
+        onServerStart: (serverName: string, index: number, total: number) => {
+          if (spinner) {
+            spinner.text = `Scanning ${serverName} (${index}/${total})...`;
+          }
+        },
+      });
+
+      if (spinner) {
+        spinner.succeed(`Scan complete - ${result.servers.length} server(s) scanned`);
+      }
+    } catch (error) {
+      if (spinner) {
+        spinner.fail(`Scan failed: ${(error as Error).message}`);
+      }
+      throw error;
     }
-    result = await scanMcpConfig(targetPath, filterOpts);
   }
 
   // Apply severity threshold filter
@@ -491,6 +530,8 @@ OPTIONS:
   --server <name>            Only scan specific server(s) (can be repeated)
   --exclude-server <name>    Exclude server(s) from scan (can be repeated)
   --allowlist <file>         Skip matches found in allowlist file (one phrase per line)
+  --pattern-file <file>      Load custom detection patterns from JSON file
+  --pattern-file-only        Use only custom patterns (disable built-in)
   --quiet                    Suppress output on clean scans (exit code still set)
   --exit-zero                Always exit with code 0 (for info-only mode)
   --version, -v              Show version
@@ -535,6 +576,9 @@ EXAMPLES:
 
   # Skip false positives using allowlist
   mcp-guardian --allowlist allowlist.txt
+
+  # Use custom detection patterns
+  mcp-guardian --pattern-file custom-patterns.json
 
 CLAUDE DESKTOP INTEGRATION:
   Add to your claude_desktop_config.json:
@@ -611,6 +655,56 @@ function loadAllowlistFile(filePath: string): string[] {
 }
 
 /**
+ * Load custom patterns from JSON file
+ */
+function loadPatternFile(filePath: string): CustomPatternDef[] {
+  if (!existsSync(filePath)) {
+    console.error(`Pattern file not found: ${filePath}`);
+    process.exit(EXIT_ERROR);
+  }
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    const data = JSON.parse(content);
+
+    // Support both { patterns: [...] } and direct array
+    const patterns = Array.isArray(data) ? data : data.patterns;
+
+    if (!Array.isArray(patterns)) {
+      console.error(`Invalid pattern file: expected array or { patterns: [...] }`);
+      process.exit(EXIT_ERROR);
+    }
+
+    // Validate each pattern
+    for (const p of patterns) {
+      if (!p.id || !p.pattern || !p.severity) {
+        console.error(`Invalid pattern: missing id, pattern, or severity`);
+        process.exit(EXIT_ERROR);
+      }
+      if (!["critical", "warning", "info"].includes(p.severity)) {
+        console.error(`Invalid severity "${p.severity}" in pattern "${p.id}"`);
+        process.exit(EXIT_ERROR);
+      }
+      // Test that the regex is valid
+      try {
+        new RegExp(p.pattern);
+      } catch (e) {
+        console.error(`Invalid regex in pattern "${p.id}": ${(e as Error).message}`);
+        process.exit(EXIT_ERROR);
+      }
+    }
+
+    return patterns;
+  } catch (error) {
+    if ((error as Error).message.includes("JSON")) {
+      console.error(`Failed to parse pattern file as JSON: ${(error as Error).message}`);
+    } else {
+      console.error(`Failed to read pattern file: ${(error as Error).message}`);
+    }
+    process.exit(EXIT_ERROR);
+  }
+}
+
+/**
  * Main entry point
  */
 async function main(): Promise<void> {
@@ -630,10 +724,12 @@ async function main(): Promise<void> {
     servers: parseRepeatedFlag(args, "--server"),
     excludeServers: parseRepeatedFlag(args, "--exclude-server"),
     allowlistFile: parseSingleFlag(args, "--allowlist"),
+    patternFile: parseSingleFlag(args, "--pattern-file"),
+    patternFileOnly: args.includes("--pattern-file-only"),
   };
 
   // Filter out flags to get config path (skip flag values too)
-  const flagsWithValues = ["--severity-threshold", "--server", "--exclude-server", "--allowlist"];
+  const flagsWithValues = ["--severity-threshold", "--server", "--exclude-server", "--allowlist", "--pattern-file"];
   const positionalArgs = args.filter((arg, idx) => {
     if (arg.startsWith("-")) return false;
     // Skip values that follow flags with values

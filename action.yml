@@ -1,0 +1,123 @@
+name: 'MCP Guardian Security Scan'
+description: 'Scan MCP tool definitions for prompt injection vulnerabilities'
+author: 'Alexandria Eden'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  config-path:
+    description: 'Path to claude_desktop_config.json'
+    required: false
+    default: ''
+  severity-threshold:
+    description: 'Minimum severity to report (warning or critical)'
+    required: false
+    default: 'warning'
+  fail-on-findings:
+    description: 'Fail the workflow if security issues are found'
+    required: false
+    default: 'true'
+  sarif-output:
+    description: 'Generate SARIF output file for GitHub Advanced Security'
+    required: false
+    default: 'true'
+  sarif-file:
+    description: 'Path for SARIF output file'
+    required: false
+    default: 'mcp-guardian-results.sarif'
+
+outputs:
+  findings-count:
+    description: 'Total number of findings'
+    value: ${{ steps.scan.outputs.findings-count }}
+  critical-count:
+    description: 'Number of critical findings'
+    value: ${{ steps.scan.outputs.critical-count }}
+  warning-count:
+    description: 'Number of warning findings'
+    value: ${{ steps.scan.outputs.warning-count }}
+  sarif-file:
+    description: 'Path to the generated SARIF file'
+    value: ${{ steps.scan.outputs.sarif-file }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install mcp-guardian
+      shell: bash
+      run: npm install -g mcp-guardian
+
+    - name: Run security scan
+      id: scan
+      shell: bash
+      run: |
+        # Determine config path
+        CONFIG_PATH="${{ inputs.config-path }}"
+        if [ -z "$CONFIG_PATH" ]; then
+          # Try to find config in common locations
+          if [ -f "claude_desktop_config.json" ]; then
+            CONFIG_PATH="claude_desktop_config.json"
+          elif [ -f ".claude/claude_desktop_config.json" ]; then
+            CONFIG_PATH=".claude/claude_desktop_config.json"
+          fi
+        fi
+
+        # Build command
+        CMD="mcp-guardian"
+        if [ -n "$CONFIG_PATH" ]; then
+          CMD="$CMD $CONFIG_PATH"
+        fi
+        CMD="$CMD --severity-threshold ${{ inputs.severity-threshold }} --json"
+
+        # Run scan and capture output
+        SCAN_OUTPUT=$(eval $CMD 2>/dev/null || true)
+
+        # Parse results
+        CRITICAL=$(echo "$SCAN_OUTPUT" | jq -r '.summary.critical // 0')
+        WARNING=$(echo "$SCAN_OUTPUT" | jq -r '.summary.warning // 0')
+        TOTAL=$((CRITICAL + WARNING))
+
+        echo "findings-count=$TOTAL" >> $GITHUB_OUTPUT
+        echo "critical-count=$CRITICAL" >> $GITHUB_OUTPUT
+        echo "warning-count=$WARNING" >> $GITHUB_OUTPUT
+
+        # Generate SARIF if requested
+        if [ "${{ inputs.sarif-output }}" = "true" ]; then
+          SARIF_FILE="${{ inputs.sarif-file }}"
+          SARIF_CMD="mcp-guardian"
+          if [ -n "$CONFIG_PATH" ]; then
+            SARIF_CMD="$SARIF_CMD $CONFIG_PATH"
+          fi
+          SARIF_CMD="$SARIF_CMD --sarif"
+          eval $SARIF_CMD > "$SARIF_FILE" 2>/dev/null || echo '{"runs":[]}' > "$SARIF_FILE"
+          echo "sarif-file=$SARIF_FILE" >> $GITHUB_OUTPUT
+        fi
+
+        # Report findings
+        echo "## MCP Guardian Security Scan Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Critical | $CRITICAL |" >> $GITHUB_STEP_SUMMARY
+        echo "| Warning | $WARNING |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Total** | **$TOTAL** |" >> $GITHUB_STEP_SUMMARY
+
+        # Fail if configured and findings exist
+        if [ "${{ inputs.fail-on-findings }}" = "true" ] && [ "$TOTAL" -gt 0 ]; then
+          echo "::error::Found $TOTAL security issue(s) in MCP tool definitions"
+          exit 1
+        fi
+
+    - name: Upload SARIF to GitHub
+      if: inputs.sarif-output == 'true' && always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+      continue-on-error: true

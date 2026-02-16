@@ -128,9 +128,11 @@ export async function scanMcpConfig(
     servers?: string[];
     /** Exclude these servers from scan */
     excludeServers?: string[];
+    /** Callback when starting to scan a server */
+    onServerStart?: (serverName: string, index: number, total: number) => void;
   } = {}
 ): Promise<ScanSummary> {
-  const { timeout = 10000, skipFailures = true, servers: includeServers, excludeServers } = options;
+  const { timeout = 10000, skipFailures = true, servers: includeServers, excludeServers, onServerStart } = options;
 
   const config = parseConfig(configPath);
   if (!config) {
@@ -153,16 +155,29 @@ export async function scanMcpConfig(
     };
   }
 
-  for (const [serverName, serverConfig] of Object.entries(config.mcpServers)) {
-    // Filter by include list
+  // Get filtered server list for progress tracking
+  const serverEntries = Object.entries(config.mcpServers).filter(([serverName]) => {
     if (includeServers && includeServers.length > 0 && !includeServers.includes(serverName)) {
-      continue;
+      return false;
     }
-    // Filter by exclude list
     if (excludeServers && excludeServers.length > 0 && excludeServers.includes(serverName)) {
-      continue;
+      return false;
     }
-    console.error(`[mcp-guardian] Scanning server: ${serverName}`);
+    return true;
+  });
+
+  const totalServers = serverEntries.length;
+  let serverIndex = 0;
+
+  for (const [serverName, serverConfig] of serverEntries) {
+    serverIndex++;
+
+    // Call progress callback if provided
+    if (onServerStart) {
+      onServerStart(serverName, serverIndex, totalServers);
+    } else {
+      console.error(`[mcp-guardian] Scanning server: ${serverName}`);
+    }
 
     const tools = await extractToolsFromServer(serverConfig, serverName, timeout);
 

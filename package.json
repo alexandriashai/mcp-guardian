@@ -48,6 +48,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",
+    "ora": "^8.2.0",
     "zod": "^3.23.0"
   },
   "files": [

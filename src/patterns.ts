@@ -217,6 +217,52 @@ export const ALL_PATTERNS: DetectionPattern[] = [
   ...WARNING_PATTERNS,
 ];
 
+/**
+ * Custom patterns loaded at runtime
+ */
+let customPatterns: DetectionPattern[] = [];
+let useCustomPatternsOnly = false;
+
+/**
+ * Custom pattern definition for JSON/YAML files
+ */
+export interface CustomPatternDef {
+  id: string;
+  description?: string;
+  pattern: string;  // RegExp string
+  severity: "critical" | "warning" | "info";
+  category?: string;
+  cwe?: string;
+}
+
+/**
+ * Load custom patterns from definitions
+ */
+export function loadCustomPatterns(patterns: CustomPatternDef[]): void {
+  customPatterns = patterns.map(p => ({
+    regex: new RegExp(p.pattern, "i"),
+    pattern: p.id,
+    severity: p.severity,
+  }));
+}
+
+/**
+ * Set whether to use only custom patterns (disabling built-in)
+ */
+export function setCustomPatternsOnly(value: boolean): void {
+  useCustomPatternsOnly = value;
+}
+
+/**
+ * Get the active patterns (built-in + custom or custom only)
+ */
+export function getActivePatterns(): DetectionPattern[] {
+  if (useCustomPatternsOnly) {
+    return customPatterns;
+  }
+  return [...ALL_PATTERNS, ...customPatterns];
+}
+
 // ============================================================================
 // Core Functions
 // ============================================================================
@@ -266,9 +312,10 @@ export function scanToolDescription(
   description: string
 ): ToolScanResult {
   const issues: ScanIssue[] = [];
+  const activePatterns = getActivePatterns();
 
   // Scan for all patterns
-  for (const pattern of ALL_PATTERNS) {
+  for (const pattern of activePatterns) {
     // Use global flag for finding all matches
     const globalRegex = new RegExp(pattern.regex.source, "gi");
     let match;

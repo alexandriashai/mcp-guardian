@@ -40,6 +40,10 @@ export {
   isDescriptionSafe,
   setAllowlist,
   getAllowlist,
+  loadCustomPatterns,
+  setCustomPatternsOnly,
+  getActivePatterns,
+  type CustomPatternDef,
 } from "./patterns.js";
 
 // Tool pinning

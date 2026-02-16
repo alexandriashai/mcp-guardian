@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/alexandriashai/mcp-guardian/main/schemas/patterns.schema.json",
+  "description": "Example custom detection patterns for mcp-guardian",
+  "patterns": [
+    {
+      "id": "internal_api_call",
+      "description": "Detects references to internal API endpoints",
+      "pattern": "internal[_-]?api|corp[_-]?endpoint",
+      "severity": "warning",
+      "category": "corporate_policy"
+    },
+    {
+      "id": "company_secret",
+      "description": "Detects references to company-specific secrets",
+      "pattern": "company[_-]?secret|org[_-]?token",
+      "severity": "critical",
+      "category": "corporate_policy"
+    },
+    {
+      "id": "production_database",
+      "description": "Detects references to production databases",
+      "pattern": "prod[_-]?db|production[_-]?database",
+      "severity": "critical",
+      "category": "infrastructure"
+    }
+  ]
+}
