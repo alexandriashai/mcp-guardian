@@ -5,7 +5,7 @@
  * MIT License
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, watch } from "node:fs";
 import ora from "ora";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -67,6 +67,7 @@ interface CliOptions {
   allowlistFile: string | null;
   patternFile: string | null;
   patternFileOnly: boolean;
+  watch: boolean;
 }
 
 const VERSION = getVersion();
@@ -514,7 +515,10 @@ async function runCliScan(configPath: string | null, options: CliOptions): Promi
 
   // Quiet mode: no output on clean scan
   if (options.quiet && exitCode === EXIT_CLEAN) {
-    process.exit(options.exitZero ? EXIT_CLEAN : exitCode);
+    if (!options.watch) {
+      process.exit(options.exitZero ? EXIT_CLEAN : exitCode);
+    }
+    return;
   }
 
   // Output results
@@ -557,8 +561,10 @@ async function runCliScan(configPath: string | null, options: CliOptions): Promi
     }
   }
 
-  // Exit with appropriate code
-  process.exit(options.exitZero ? EXIT_CLEAN : exitCode);
+  // Exit with appropriate code (unless in watch mode)
+  if (!options.watch) {
+    process.exit(options.exitZero ? EXIT_CLEAN : exitCode);
+  }
 }
 
 /**
@@ -583,6 +589,7 @@ OPTIONS:
   --allowlist <file>         Skip matches found in allowlist file (one phrase per line)
   --pattern-file <file>      Load custom detection patterns from JSON file
   --pattern-file-only        Use only custom patterns (disable built-in)
+  --watch                    Watch config file for changes and re-scan
   --quiet                    Suppress output on clean scans (exit code still set)
   --exit-zero                Always exit with code 0 (for info-only mode)
   --version, -v              Show version
@@ -630,6 +637,9 @@ EXAMPLES:
 
   # Use custom detection patterns
   mcp-guardian --pattern-file custom-patterns.json
+
+  # Watch for config changes
+  mcp-guardian --watch
 
 CLAUDE DESKTOP INTEGRATION:
   Add to your claude_desktop_config.json:
@@ -777,6 +787,7 @@ async function main(): Promise<void> {
     allowlistFile: parseSingleFlag(args, "--allowlist"),
     patternFile: parseSingleFlag(args, "--pattern-file"),
     patternFileOnly: args.includes("--pattern-file-only"),
+    watch: args.includes("--watch"),
   };
 
   // Filter out flags to get config path (skip flag values too)
@@ -801,6 +812,50 @@ async function main(): Promise<void> {
 
   if (options.mcp) {
     await runMcpServer();
+    return;
+  }
+
+  // Watch mode: continuous monitoring with debouncing
+  if (options.watch) {
+    const targetPath = configPath || getDefaultConfigPath();
+
+    if (!existsSync(targetPath)) {
+      console.error(`Config file not found: ${targetPath}`);
+      process.exit(EXIT_ERROR);
+    }
+
+    console.error(`[mcp-guardian] Watching: ${targetPath}`);
+    console.error(`[mcp-guardian] Press Ctrl+C to stop\n`);
+
+    // Initial scan
+    await runCliScan(targetPath, options);
+
+    // Debounce timer
+    let debounceTimer: NodeJS.Timeout | null = null;
+
+    // Watch for changes
+    watch(targetPath, { persistent: true }, async (eventType) => {
+      if (eventType === "change") {
+        // Debounce rapid changes (500ms)
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
+        debounceTimer = setTimeout(async () => {
+          const timestamp = new Date().toLocaleTimeString();
+          console.error(`\n[mcp-guardian] [${timestamp}] Config changed, re-scanning...`);
+          await runCliScan(targetPath, options);
+        }, 500);
+      }
+    });
+
+    // Keep process alive
+    process.on("SIGINT", () => {
+      console.error("\n[mcp-guardian] Watch stopped");
+      process.exit(0);
+    });
+
+    // Prevent exit
+    await new Promise(() => {});
     return;
   }
 
