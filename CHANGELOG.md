@@ -1,5 +1,12 @@
 # Changelog
 
+# [1.8.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.7.0...v1.8.0) (2026-02-16)
+
+
+### Features
+
+* **cli:** add watch mode for continuous monitoring ([b215985](https://github.com/alexandriashai/mcp-guardian/commit/b215985a0a30805412957b2849e46ce63098c32e)), closes [#9](https://github.com/alexandriashai/mcp-guardian/issues/9)
+
 # [1.7.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.6.0...v1.7.0) (2026-02-16)
 
 
