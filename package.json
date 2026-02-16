@@ -21,6 +21,7 @@
     "dev": "tsc --watch",
     "test": "node --test",
     "clean": "rm -rf dist/",
+    "release": "release-it",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -55,7 +56,9 @@
     "LICENSE"
   ],
   "devDependencies": {
+    "@release-it/conventional-changelog": "^10.0.0",
     "@types/node": "^25.2.3",
+    "release-it": "^19.0.0",
     "typescript": "^5.9.3"
   }
 }
