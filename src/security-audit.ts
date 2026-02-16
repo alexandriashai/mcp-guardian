@@ -12,7 +12,7 @@ import {
 import { scanMcpConfig, scanMcpConfigSync } from "./manifest.js";
 import { loadToolManifest } from "./tool-pinning.js";
 import { getDefaultConfigPath } from "./config.js";
-import type { ServerScanResult, ScanSummary } from "./types.js";
+import type { ServerScanResult, ScanSummary, ToolDefinition } from "./types.js";
 
 /**
  * Zod schema for security_audit parameters
@@ -22,7 +22,7 @@ export const SecurityAuditSchema = {
     .string()
     .optional()
     .describe(
-      "Path to claude_desktop_config.json. If not provided, scans the current server's tools from manifest."
+      "Path to claude_desktop_config.json. If not provided, scans the current server's tools."
     ),
   format: z
     .enum(["json", "text"])
@@ -43,21 +43,34 @@ export type SecurityAuditParams = {
 };
 
 /**
+ * Extended params for programmatic use (includes tools array)
+ */
+export type SecurityAuditHandlerOptions = SecurityAuditParams & {
+  /** Direct tool definitions to scan (for embedding in MCP servers) */
+  tools?: ToolDefinition[];
+  /** Server name when scanning direct tools */
+  serverName?: string;
+};
+
+/**
  * Security audit tool handler.
  *
  * Scans MCP tool definitions for potential prompt injection attacks.
  *
- * @param params - Tool parameters
+ * @param params - Tool parameters (or extended options with direct tools)
  * @returns MCP tool result with scan report
  */
-export async function securityAuditHandler(params: SecurityAuditParams): Promise<{
+export async function securityAuditHandler(params: SecurityAuditHandlerOptions): Promise<{
   content: Array<{ type: "text"; text: string }>;
 }> {
-  const { config_path, format = "json", async_scan = false } = params;
+  const { config_path, format = "json", async_scan = false, tools: directTools, serverName } = params;
 
   let result: ServerScanResult | ScanSummary;
 
-  if (config_path) {
+  if (directTools && directTools.length > 0) {
+    // Scan tools passed directly (e.g., from embedding MCP server)
+    result = scanToolDefinitions(directTools, serverName || "current-server");
+  } else if (config_path) {
     // Scan external MCP config
     if (async_scan) {
       result = await scanMcpConfig(config_path);
@@ -77,7 +90,7 @@ export async function securityAuditHandler(params: SecurityAuditParams): Promise
               {
                 error: "No tool manifest found",
                 hint:
-                  "Run the MCP server once to generate the tool manifest, or provide a config_path to scan.",
+                  "Provide a config_path to scan your Claude Desktop config, or the embedding server should pass its tools directly.",
                 defaultConfigPath: getDefaultConfigPath(),
               },
               null,

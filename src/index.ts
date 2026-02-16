@@ -67,4 +67,5 @@ export {
   SecurityAuditSchema,
   securityAuditHandler,
   type SecurityAuditParams,
+  type SecurityAuditHandlerOptions,
 } from "./security-audit.js";
