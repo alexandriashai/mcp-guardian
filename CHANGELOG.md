@@ -1,5 +1,12 @@
 # Changelog
 
+# [2.1.0](https://github.com/alexandriashai/mcp-guardian/compare/v2.0.0...v2.1.0) (2026-02-16)
+
+
+### Features
+
+* **cli:** add manifest backup and rollback ([47e8f36](https://github.com/alexandriashai/mcp-guardian/commit/47e8f3659a2cdeb9fa28fdccceeab1da0f9c130f)), closes [#19](https://github.com/alexandriashai/mcp-guardian/issues/19)
+
 # [2.0.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.9.0...v2.0.0) (2026-02-16)
 
 
