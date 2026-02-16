@@ -1,5 +1,12 @@
 # Changelog
 
+# [1.4.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.3.0...v1.4.0) (2026-02-16)
+
+
+### Features
+
+* **cli:** add pre-commit hooks and server filtering ([5aa076b](https://github.com/alexandriashai/mcp-guardian/commit/5aa076bbb909d57aa4f494cd39d6193377d72f79)), closes [#12](https://github.com/alexandriashai/mcp-guardian/issues/12) [#20](https://github.com/alexandriashai/mcp-guardian/issues/20)
+
 # [1.3.0](https://github.com/alexandriashai/mcp-guardian/compare/v1.2.2...v1.3.0) (2026-02-16)
 
 
