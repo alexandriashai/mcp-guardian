@@ -1,5 +1,12 @@
 # Changelog
 
+# [2.3.0](https://github.com/alexandriashai/mcp-guardian/compare/v2.2.1...v2.3.0) (2026-02-17)
+
+
+### Features
+
+* **examples:** add poisoned MCP server for demo and testing ([5b7aa49](https://github.com/alexandriashai/mcp-guardian/commit/5b7aa49ecbfcd4116c8cbfbcb97e94e202c3caee))
+
 ## [2.2.1](https://github.com/alexandriashai/mcp-guardian/compare/v2.2.0...v2.2.1) (2026-02-16)
 
 
