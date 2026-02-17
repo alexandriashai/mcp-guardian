@@ -102,10 +102,14 @@ npm run build
 npm run demo
 ```
 
-Or scan the example config directly:
+After cloning, you can also run:
 
 ```bash
-npx mcp-guardian examples/demo-config.json
+# From the mcp-guardian directory
+node dist/bin/mcp-guardian.js examples/demo-config.json
+
+# Or use the npm script
+npm run demo
 ```
 
 **Expected output:**
