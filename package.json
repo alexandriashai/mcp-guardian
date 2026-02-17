@@ -21,6 +21,8 @@
     "dev": "tsc --watch",
     "test": "node --test",
     "clean": "rm -rf dist/",
+    "demo": "node dist/bin/mcp-guardian.js examples/demo-config.json",
+    "demo:sync": "node dist/bin/mcp-guardian.js --sync examples/demo-config.json",
     "release": "release-it",
     "prepublishOnly": "npm run build"
   },
@@ -53,6 +55,7 @@
   },
   "files": [
     "dist/",
+    "examples/",
     "README.md",
     "LICENSE"
   ],
