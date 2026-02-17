@@ -88,6 +88,44 @@ if (pinResult.status === "changed") {
 }
 ```
 
+## Demo
+
+Try mcp-guardian with the included poisoned server example:
+
+```bash
+# Clone and run demo
+git clone https://github.com/alexandriashai/mcp-guardian
+cd mcp-guardian
+npm install
+cd examples/poisoned-server && npm install && cd ../..
+npm run build
+npm run demo
+```
+
+Or scan the example config directly:
+
+```bash
+npx mcp-guardian examples/demo-config.json
+```
+
+**Expected output:**
+```
+✅ filesystem (14 tools)
+✅ memory (9 tools)
+🔴 suspicious-tool (4 tools)
+   └─ add: sensitive_path (~/.ssh)
+   └─ format_text: privilege_escalation ("You are now")
+   └─ search_docs: exfiltration (evil URL), sensitive_path (~/.aws/credentials)
+
+Summary:
+  📊 Total tools: 27
+  ✅ Clean: 2
+  ⚠️  Warning: 0
+  🚨 Critical: 1
+```
+
+The poisoned server demonstrates real attack patterns from published security research. See `examples/poisoned-server/README.md` for details.
+
 ## Detection Patterns
 
 ### Critical Severity (38 patterns)
