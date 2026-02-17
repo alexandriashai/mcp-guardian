@@ -90,27 +90,13 @@ if (pinResult.status === "changed") {
 
 ## Demo
 
-Try mcp-guardian with the included poisoned server example:
+Try mcp-guardian instantly with built-in poisoned tool examples:
 
 ```bash
-# Clone and run demo
-git clone https://github.com/alexandriashai/mcp-guardian
-cd mcp-guardian
-npm install
-cd examples/poisoned-server && npm install && cd ../..
-npm run build
-npm run demo
+npx mcp-guardian demo
 ```
 
-After cloning, you can also run:
-
-```bash
-# From the mcp-guardian directory
-node dist/bin/mcp-guardian.js examples/demo-config.json
-
-# Or use the npm script
-npm run demo
-```
+This scans hardcoded examples demonstrating real attack patterns — no config file needed.
 
 **Expected output:**
 ```
