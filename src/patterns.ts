@@ -88,6 +88,17 @@ export const CRITICAL_PATTERNS: DetectionPattern[] = [
     pattern: "privilege_escalation",
     severity: "critical",
   },
+  // "Ignore previous instructions" — the single most common prompt-injection
+  // phrasing, and it was NOT detected. There was a `forget (everything|all|
+  // previous)` rule but no `ignore`/`disregard` equivalent, so the canonical
+  // attack string scanned clean. Found 2026-07-29 while adding this package's
+  // first tests: a false NEGATIVE, discovered because the same test file that
+  // pins the false-positive fixes also asserts the rules it did not touch.
+  {
+    regex: /\b(?:ignore|disregard|forget|override)\s+(?:all\s+|any\s+)?(?:the\s+)?(?:previous|prior|earlier|above|preceding|system)\s+(?:instruction|prompt|rule|direction|message|context)s?\b/i,
+    pattern: "privilege_escalation",
+    severity: "critical",
+  },
   {
     regex: /\bforget\s+(everything|all|previous)\b/i,
     pattern: "privilege_escalation",
@@ -95,10 +106,31 @@ export const CRITICAL_PATTERNS: DetectionPattern[] = [
   },
 
   // Exfiltration - attempts to send data externally
+  //
+  // STRONGEST signal: an exfiltration verb whose destination is a URL. The verb
+  // rules below require the verb and "to" to be ADJACENT (`send to`), so
+  // "send results to https://evil.com/collect" matched none of them and relied
+  // entirely on the bare-URL rule underneath. Allowing an object between the
+  // verb and its destination is what English actually does. (2026-07-29)
   {
-    regex: /https?:\/\/[^\s]+/i,
+    regex: /\b(?:send|post|upload|forward|transmit|exfiltrate|leak|report|beacon)\b[^.!?\n]{0,60}?\bto\s+https?:\/\//i,
     pattern: "exfiltration",
     severity: "critical",
+  },
+  // A bare URL is WEAK evidence and was rated critical, so any tool description
+  // that cites a spec self-reported as critical. Measured on cbrowser's server:
+  // `press_key` links the MDN key-values page, and security_audit returned
+  // status "critical" against the server it ships with. A scanner that cries
+  // wolf on the thing it ships with gets ignored on real findings.
+  //
+  // Downgraded, not removed — an unrecognised host is still worth surfacing —
+  // and well-known documentation hosts are excluded outright, because citing a
+  // spec is what a good tool description does. The rule above keeps genuine
+  // exfiltration at critical. (2026-07-29)
+  {
+    regex: /https?:\/\/(?!(?:[\w-]+\.)*(?:developer\.mozilla\.org|mozilla\.org|w3\.org|whatwg\.org|schema\.org|github\.com|npmjs\.com|json-schema\.org|modelcontextprotocol\.io)\b)[^\s]+/i,
+    pattern: "exfiltration",
+    severity: "warning",
   },
   {
     regex: /\bsend\s+to\b/i,
@@ -191,7 +223,11 @@ export const WARNING_PATTERNS: DetectionPattern[] = [
   // Encoded content (potential obfuscation)
   // Base64: at least 20 chars of alphanumeric with possible padding
   {
-    regex: /[A-Za-z0-9+/]{20,}={0,2}/,
+    // The class includes `/` (valid base64), so any long slash-separated run
+    // matched: `keydown/keypress/keyup` and `com/alexandriashai/cbrowser` both
+    // did. Real base64 of binary data carries a digit, `+`, or `=` padding;
+    // runs of lowercase words separated by slashes do not. (2026-07-29)
+    regex: /(?=[A-Za-z0-9+/]{20,}={0,2})[A-Za-z0-9+/]*[0-9+=][A-Za-z0-9+/]*={0,2}/,
     pattern: "encoded_content",
     severity: "warning",
   },
